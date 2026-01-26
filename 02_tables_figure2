@@ -1,0 +1,575 @@
+# ==============================================================================
+# STOP Speech-ABR Analysis: DEMOGRAPHICS TABLES + FIGURE 2
+# ==============================================================================
+# Extended HF hearing loss and synaptopathy predict speech perception in aging
+# Nature Aging
+# ==============================================================================
+
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(knitr)
+  library(ggplot2)
+  library(ggdist)
+  library(patchwork)
+})
+
+# ==============================================================================
+# Summary statistics helper function
+# ==============================================================================
+
+calc_summary <- function(x, na.rm = TRUE) {
+  x_clean <- x[!is.na(x)]
+  
+  if (length(x_clean) == 0) {
+    return(list(mean_sd = "-", range = "-", n = 0))
+  }
+  
+  if (length(x_clean) == 1) {
+    val <- x_clean[1]
+    return(list(
+      mean_sd = sprintf("%.1f", val),
+      range = sprintf("%.1f to %.1f", val, val),
+      n = 1
+    ))
+  }
+  
+  mean_val <- mean(x_clean)
+  sd_val <- sd(x_clean)
+  min_val <- min(x_clean)
+  max_val <- max(x_clean)
+  
+  return(list(
+    mean_sd = sprintf("%.1f +/- %.1f", mean_val, sd_val),
+    range = sprintf("%.1f to %.1f", min_val, max_val),
+    n = length(x_clean)
+  ))
+}
+
+# ==============================================================================
+# Standard error function
+# ==============================================================================
+
+std_error <- function(x) sd(x, na.rm = TRUE) / sqrt(sum(!is.na(x)))
+
+# ==============================================================================
+# Load data
+# ==============================================================================
+
+data <- readRDS("output/data_clean.rds")
+
+# ==============================================================================
+# Generate Table 1: Overall Demographics
+# ==============================================================================
+
+create_table1 <- function(data) {
+  total_n <- nrow(data)
+  results <- data.frame(
+    Variable = character(),
+    Mean_SD_or_N = character(),
+    Range = character(),
+    stringsAsFactors = FALSE
+  )
+  
+  results <- rbind(results, data.frame(Variable = "N (ears)", Mean_SD_or_N = as.character(total_n), Range = "-", stringsAsFactors = FALSE))
+  
+  age_stats <- calc_summary(data$Age)
+  results <- rbind(results, data.frame(Variable = "Age (years)", Mean_SD_or_N = age_stats$mean_sd, Range = age_stats$range, stringsAsFactors = FALSE))
+  
+  sex_table <- table(data$Sex, useNA = "no")
+  if (length(sex_table) >= 2) {
+    female_idx <- which(names(sex_table) %in% c("Woman", "Female", "F"))
+    sex_female <- ifelse(length(female_idx) > 0, sex_table[female_idx[1]], sex_table[2])
+    sex_pct <- round(100 * sex_female / total_n, 0)
+    results <- rbind(results, data.frame(Variable = "Sex (female)", Mean_SD_or_N = sprintf("%d (%d%%)", sex_female, sex_pct), Range = "-", stringsAsFactors = FALSE))
+  }
+  
+  pta4_stats <- calc_summary(data$PTA4)
+  results <- rbind(results, data.frame(Variable = "PTA4 (0.5-4 kHz) dB HL", Mean_SD_or_N = pta4_stats$mean_sd, Range = pta4_stats$range, stringsAsFactors = FALSE))
+  
+  ptahf_stats <- calc_summary(data$PTAHF)
+  results <- rbind(results, data.frame(Variable = "PTAeHF (10-16 kHz) dB HL", Mean_SD_or_N = ptahf_stats$mean_sd, Range = ptahf_stats$range, stringsAsFactors = FALSE))
+  
+  ucl_stats <- calc_summary(data$UCL8000)
+  results <- rbind(results, data.frame(Variable = "LDL8kHz (dB HL)", Mean_SD_or_N = ucl_stats$mean_sd, Range = ucl_stats$range, stringsAsFactors = FALSE))
+  
+  oae_stats <- calc_summary(data$Oae_5273)
+  results <- rbind(results, data.frame(Variable = "OAE5273 (dB SNR)", Mean_SD_or_N = oae_stats$mean_sd, Range = oae_stats$range, stringsAsFactors = FALSE))
+  
+  ws_stats <- calc_summary(data$WS)
+  results <- rbind(results, data.frame(Variable = "Word score (%)", Mean_SD_or_N = ws_stats$mean_sd, Range = ws_stats$range, stringsAsFactors = FALSE))
+  
+  ps_stats <- calc_summary(data$PS)
+  results <- rbind(results, data.frame(Variable = "Phoneme score (%)", Mean_SD_or_N = ps_stats$mean_sd, Range = ps_stats$range, stringsAsFactors = FALSE))
+  
+  eclipse_data <- data %>% filter(!is.na(Device) & Device == "Eclipse")
+  w1amp_stats <- calc_summary(eclipse_data$W1.amp)
+  results <- rbind(results, data.frame(Variable = "Wave I amplitude - Eclipse (uV)", Mean_SD_or_N = w1amp_stats$mean_sd, Range = w1amp_stats$range, stringsAsFactors = FALSE))
+  
+  w1lat_stats <- calc_summary(data$W1.Plat)
+  results <- rbind(results, data.frame(Variable = "Wave I latency (ms)", Mean_SD_or_N = w1lat_stats$mean_sd, Range = w1lat_stats$range, stringsAsFactors = FALSE))
+  
+  w3lat_stats <- calc_summary(data$W3.Plat)
+  results <- rbind(results, data.frame(Variable = "Wave III latency (ms)", Mean_SD_or_N = w3lat_stats$mean_sd, Range = w3lat_stats$range, stringsAsFactors = FALSE))
+  
+  w5lat_stats <- calc_summary(data$W5.Plat)
+  results <- rbind(results, data.frame(Variable = "Wave V latency (ms)", Mean_SD_or_N = w5lat_stats$mean_sd, Range = w5lat_stats$range, stringsAsFactors = FALSE))
+  
+  iv_latency <- data$W5.Plat - data$W1.Plat
+  ivlat_stats <- calc_summary(iv_latency)
+  results <- rbind(results, data.frame(Variable = "I-V inter-wave latency (ms)", Mean_SD_or_N = ivlat_stats$mean_sd, Range = ivlat_stats$range, stringsAsFactors = FALSE))
+  
+  colnames(results) <- c("Variable", "Mean +/- SD or N (%)", "Range")
+  return(results)
+}
+
+# ==============================================================================
+# Generate stratified demographics tables
+# ==============================================================================
+
+create_stratified_table <- function(data, group_var, group_label = NULL) {
+  if(is.null(group_label)) group_label <- group_var
+  
+  groups <- sort(unique(data[[group_var]][!is.na(data[[group_var]])]))
+  data$IV_latency <- data$W5.Plat - data$W1.Plat
+  
+  vars_list <- list(
+    list(name = "N (ears)", var = NULL, type = "count"),
+    list(name = "Age (years)", var = "Age", type = "numeric"),
+    list(name = "Woman (%)", var = "Sex", type = "sex"),
+    list(name = "PTA4 (0.5-4 kHz) dB HL", var = "PTA4", type = "numeric"),
+    list(name = "PTAeHF (10-16 kHz) dB HL", var = "PTAHF", type = "numeric"),
+    list(name = "LDL8kHz (dB HL)", var = "UCL8000", type = "numeric"),
+    list(name = "OAE5273 (dB SNR)", var = "Oae_5273", type = "numeric"),
+    list(name = "Word score (%)", var = "WS", type = "numeric"),
+    list(name = "Phoneme score (%)", var = "PS", type = "numeric"),
+    list(name = "Wave I amplitude - Eclipse (uV)", var = "W1.amp", type = "eclipse"),
+    list(name = "Wave I latency (ms)", var = "W1.Plat", type = "numeric"),
+    list(name = "Wave III latency (ms)", var = "W3.Plat", type = "numeric"),
+    list(name = "Wave V latency (ms)", var = "W5.Plat", type = "numeric"),
+    list(name = "I-V inter-wave latency (ms)", var = "IV_latency", type = "numeric")
+  )
+  
+  result_rows <- list()
+  
+  for (var_info in vars_list) {
+    row <- c(Variable = var_info$name)
+    for (grp in groups) {
+      grp_data <- data[!is.na(data[[group_var]]) & data[[group_var]] == grp, ]
+      
+      if (var_info$type == "count") {
+        row <- c(row, as.character(nrow(grp_data)))
+      } else if (var_info$type == "numeric") {
+        stats <- calc_summary(grp_data[[var_info$var]])
+        row <- c(row, stats$mean_sd)
+      } else if (var_info$type == "eclipse") {
+        eclipse_grp <- grp_data %>% filter(!is.na(Device) & Device == "Eclipse")
+        if (sum(!is.na(eclipse_grp[[var_info$var]])) > 0) {
+          stats <- calc_summary(eclipse_grp[[var_info$var]])
+          row <- c(row, stats$mean_sd)
+        } else {
+          row <- c(row, "-")
+        }
+      } else if (var_info$type == "sex") {
+        sex_table <- table(grp_data$Sex, useNA = "no")
+        if (length(sex_table) >= 2) {
+          female_idx <- which(names(sex_table) %in% c("Woman", "Female", "F"))
+          female_count <- ifelse(length(female_idx) > 0, sex_table[female_idx[1]], sex_table[2])
+          female_pct <- round(100 * female_count / nrow(grp_data), 0)
+          row <- c(row, sprintf("%d (%d%%)", female_count, female_pct))
+        } else {
+          row <- c(row, "-")
+        }
+      }
+    }
+    result_rows[[length(result_rows) + 1]] <- row
+  }
+  
+  results <- as.data.frame(do.call(rbind, result_rows), stringsAsFactors = FALSE)
+  colnames(results) <- c("Variable", as.character(groups))
+  return(results)
+}
+
+# Generate and save all tables
+table1 <- create_table1(data)
+write.csv(table1, "output/Table1_Overall_Demographics.csv", row.names = FALSE, fileEncoding = "UTF-8")
+
+supp_table1 <- create_stratified_table(data, "age_group", "Age Group")
+write.csv(supp_table1, "output/SuppTable_S1_Age_Stratified.csv", row.names = FALSE, fileEncoding = "UTF-8")
+
+supp_table2 <- create_stratified_table(data, "Sex", "Sex")
+write.csv(supp_table2, "output/SuppTable_S2_Sex_Stratified.csv", row.names = FALSE, fileEncoding = "UTF-8")
+
+supp_table3 <- create_stratified_table(data, "ptahf_tertile_label", "eHF Tertile")
+write.csv(supp_table3, "output/SuppTable_S3_eHF_Tertile_Stratified.csv", row.names = FALSE, fileEncoding = "UTF-8")
+
+if(sum(!is.na(data$Device)) > 0) {
+  supp_table4 <- create_stratified_table(data, "Device", "Device")
+  write.csv(supp_table4, "output/SuppTable_S4_Device_Stratified.csv", row.names = FALSE, fileEncoding = "UTF-8")
+}
+
+# ==============================================================================
+# Generate Figure 2: 3×3 panels with age-stratified data
+# ==============================================================================
+
+if(!dir.exists("output/figures")) dir.create("output/figures", recursive = TRUE)
+
+# Age group colors
+colors <- c(
+  "<35" = "#73b152",
+  "35-44" = "#6ababb",
+  "45-54" = "#6495c9",
+  "55-64" = "#ae7bb0",
+  "65-74" = "#cd6b68",
+  "75+" = "#e59b54"
+)
+
+# Device-specific colors
+colors_eclipse <- colors
+colors_chartr <- c(
+  "<35" = "#dff4c9",
+  "35-44" = "#dff0f2",
+  "45-54" = "#dce8f7",
+  "55-64" = "#f0dff0",
+  "65-74" = "#f7ddd9",
+  "75+" = "#f7f0e0"
+)
+
+pointsz <- 2.5
+
+theme_nature <- function() {
+  theme_minimal(base_family = "Helvetica") +
+    theme(
+      text = element_text(family = "Helvetica"),
+      plot.title = element_text(size = 12, face = "plain", hjust = 0, vjust = 0),
+      axis.title = element_text(size = 10, face = "plain"),
+      axis.text = element_text(size = 8),
+      axis.ticks = element_blank(),
+      panel.grid.major = element_line(color = "gray90", linewidth = 0.3),
+      panel.grid.minor = element_blank(),
+      legend.position = "none",
+      plot.margin = unit(c(0.2, 0.2, 0.2, 0.2), "cm"),
+      aspect.ratio = 1
+    )
+}
+
+# Panel A: Pure Tone Audiogram
+pta_cols <- c("L125", "L250", "L500", "L1000", "L2000", "L3000", "L4000",
+              "L6000", "L8000", "L10000", "L12500", "L14000", "L16000")
+
+freq_map <- list(
+  L125 = 0.125, L250 = 0.25, L500 = 0.5, L1000 = 1,
+  L2000 = 2, L3000 = 3, L4000 = 4, L6000 = 6,
+  L8000 = 8, L10000 = 10, L12500 = 12.5, L14000 = 14, L16000 = 16
+)
+
+pta_data <- data %>%
+  select(age_group, all_of(pta_cols)) %>%
+  pivot_longer(cols = all_of(pta_cols), names_to = "freq_col", values_to = "threshold") %>%
+  mutate(frequency = as.numeric(unlist(freq_map[freq_col]))) %>%
+  mutate(freqLabel = factor(frequency)) %>%
+  filter(!is.na(threshold), !is.na(age_group))
+
+pta_display_freqs <- c(0.125, 0.5, 2, 4, 8, 12.5, 16)
+
+panel_a <- ggplot(data = pta_data, aes(x = freqLabel, y = threshold, color = age_group, group = age_group)) +
+  annotate("rect", xmin = 9.5, xmax = 13.5, ymin = -5, ymax = 100,
+           fill = "gray90", alpha = 0.3, color = NA) +
+  geom_hline(yintercept = 20, color = "gray50", linewidth = 0.7, linetype = "solid", alpha = 0.7) +
+  stat_summary(fun = mean, linewidth = 0.5, geom = "line", alpha = 0.8,
+               position = position_dodge(width = 0.2)) +
+  stat_summary(fun = mean,
+               fun.min = function(x) mean(x) - std_error(x),
+               fun.max = function(x) mean(x) + std_error(x),
+               geom = "errorbar", alpha = 0.8, position = position_dodge(width = 0.2),
+               linewidth = 0.5, width = 0.5) +
+  stat_summary(fun = mean, geom = "point", size = 2, alpha = 0.8,
+               position = position_dodge(width = 0.2)) +
+  scale_y_reverse(limits = c(100, -5), breaks = seq(0, 100, by = 20),
+                  name = "PTA (dB HL)") +
+  scale_color_manual(values = colors) +
+  scale_x_discrete(name = "Frequency (kHz)",
+                   labels = function(x) ifelse(as.numeric(as.character(x)) %in% pta_display_freqs,
+                                               as.character(x), "")) +
+  ggtitle("a") +
+  theme_nature()
+
+# Panel B: Loudness Discomfort Levels
+ldl_cols <- c("UCL125", "UCL250", "UCL500", "UCL1000", "UCL2000", "UCL3000",
+              "UCL4000", "UCL6000", "UCL8000", "UCL10000", "UCL12500", "UCL14000", "UCL16000")
+
+ldl_data <- data %>%
+  select(age_group, all_of(ldl_cols)) %>%
+  pivot_longer(cols = all_of(ldl_cols), names_to = "freq_col", values_to = "threshold") %>%
+  mutate(frequency = as.numeric(unlist(freq_map[gsub("UCL", "L", freq_col)]))) %>%
+  mutate(freqLabel = factor(frequency)) %>%
+  filter(!is.na(threshold), !is.na(age_group))
+
+panel_b <- ggplot(data = ldl_data, aes(x = freqLabel, y = threshold, color = age_group, group = age_group)) +
+  annotate("rect", xmin = 9.5, xmax = 13.5, ymin = 0, ymax = 120,
+           fill = "gray90", alpha = 0.3, color = NA) +
+  stat_summary(fun = mean, linewidth = 0.5, geom = "line", alpha = 0.8,
+               position = position_dodge(width = 0.2)) +
+  stat_summary(fun = mean,
+               fun.min = function(x) mean(x) - std_error(x),
+               fun.max = function(x) mean(x) + std_error(x),
+               geom = "errorbar", alpha = 0.8, position = position_dodge(width = 0.2),
+               linewidth = 0.5, width = 0.5) +
+  stat_summary(fun = mean, geom = "point", size = 2, alpha = 0.8,
+               position = position_dodge(width = 0.2)) +
+  scale_y_continuous(limits = c(0, 120), breaks = seq(0, 120, by = 20),
+                     name = "LDL (dB HL)") +
+  scale_color_manual(values = colors) +
+  scale_x_discrete(name = "Frequency (kHz)",
+                   labels = function(x) ifelse(as.numeric(as.character(x)) %in% pta_display_freqs,
+                                               as.character(x), "")) +
+  ggtitle("b") +
+  theme_nature()
+
+# Panel C: Distortion Product Otoacoustic Emissions
+dpoae_cols <- c("OAE996", "OAE1074", "OAE1152", "OAE1230", "OAE1318", "OAE1416", "OAE1513",
+                "OAE1621", "OAE1738", "OAE1865", "OAE2001", "OAE2148", "OAE2294", "OAE2460",
+                "OAE2636", "OAE2832", "OAE3027", "OAE3251", "OAE3486", "OAE3730", "OAE4003",
+                "OAE4287", "OAE4599", "OAE4921", "OAE5273", "OAE5654", "OAE6064", "OAE6494",
+                "OAE6962", "OAE7460", "OAE7998", "OAE8574", "OAE9189", "OAE9853")
+
+dpoae_map <- setNames(
+  c(0.996, 1.074, 1.152, 1.230, 1.318, 1.416, 1.513, 1.621, 1.738, 1.865, 2.001, 2.148,
+    2.294, 2.460, 2.636, 2.832, 3.027, 3.251, 3.486, 3.730, 4.003, 4.287, 4.599, 4.921,
+    5.273, 5.654, 6.064, 6.494, 6.962, 7.460, 7.998, 8.574, 9.189, 9.853),
+  dpoae_cols
+)
+
+dpoae_data <- data %>%
+  select(age_group, all_of(dpoae_cols)) %>%
+  pivot_longer(cols = all_of(dpoae_cols), names_to = "freq_col", values_to = "snr") %>%
+  mutate(frequency = as.numeric(dpoae_map[freq_col])) %>%
+  mutate(freqLabel = factor(round(frequency, 3))) %>%
+  filter(!is.na(snr), !is.na(age_group))
+
+dpoae_target_freqs <- c(1.0, 1.4, 2.0, 2.8, 4.0, 5.7, 8.0)
+dpoae_actual_freqs <- c(0.996, 1.416, 2.001, 2.832, 4.003, 5.654, 7.998)
+
+panel_c <- ggplot(data = dpoae_data, aes(x = freqLabel, y = snr, color = age_group, group = age_group)) +
+  geom_vline(xintercept = seq(7.5, 34, by = 7), color = "lightgray", linewidth = 0.5,
+             linetype = "solid", alpha = 0.6) +
+  geom_hline(yintercept = 0, color = "gray50", linewidth = 0.7, linetype = "solid", alpha = 0.7) +
+  stat_summary(fun = mean, linewidth = 0.5, geom = "line", alpha = 0.8,
+               position = position_dodge(width = 0.2)) +
+  stat_summary(fun = mean,
+               fun.min = function(x) mean(x) - std_error(x),
+               fun.max = function(x) mean(x) + std_error(x),
+               geom = "errorbar", alpha = 0.8, position = position_dodge(width = 0.2),
+               linewidth = 0.5, width = 0.5) +
+  stat_summary(fun = mean, geom = "point", size = 2, alpha = 0.8,
+               position = position_dodge(width = 0.2)) +
+  scale_y_continuous(limits = c(-5, 25), breaks = seq(-5, 25, by = 5),
+                     name = "DPOAE SNR (dB)") +
+  scale_color_manual(values = colors) +
+  scale_x_discrete(name = "F2 Frequency (kHz)",
+                   labels = function(x) {
+                     freq_num <- as.numeric(as.character(x))
+                     sapply(freq_num, function(f) {
+                       if (any(abs(f - dpoae_actual_freqs) < 0.01)) {
+                         idx <- which.min(abs(f - dpoae_actual_freqs))
+                         sprintf("%.1f", dpoae_target_freqs[idx])
+                       } else {
+                         ""
+                       }
+                     })
+                   }) +
+  ggtitle("c") +
+  theme_nature() +
+  theme(panel.grid.major.x = element_blank())
+
+# Panel D: Word Score
+data_d <- data %>% filter(!is.na(WS), !is.na(age_group))
+
+panel_d <- ggplot(data_d, aes(x = age_group, y = WS, fill = age_group, color = age_group)) +
+  stat_halfeye(
+    adjust = 0.5, width = 0.5, .width = 0, justification = 0,
+    point_colour = NA, alpha = 0.40, linewidth = 0.5,
+    color = "#666666", show.legend = FALSE
+  ) +
+  geom_boxplot(
+    width = 0.12, outlier.shape = NA, color = "black",
+    linewidth = 0.4, alpha = 1.0, show.legend = FALSE
+  ) +
+  geom_point(
+    aes(x = as.numeric(age_group) - 0.21),
+    position = position_jitter(width = 0.08, height = 0.5, seed = 42),
+    alpha = 1.0, size = 0.25, show.legend = FALSE
+  ) +
+  scale_fill_manual(values = colors) +
+  scale_color_manual(values = colors) +
+  scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, by = 20),
+                     name = "Word Score (%)") +
+  scale_x_discrete(name = "Age Group") +
+  ggtitle("d") +
+  theme_nature()
+
+# Panel E: Phoneme Score
+data_e <- data %>% filter(!is.na(PS), !is.na(age_group))
+
+panel_e <- ggplot(data_e, aes(x = age_group, y = PS, fill = age_group, color = age_group)) +
+  stat_halfeye(
+    adjust = 0.5, width = 0.5, .width = 0, justification = 0,
+    point_colour = NA, alpha = 0.40, linewidth = 0.5,
+    color = "#666666", show.legend = FALSE
+  ) +
+  geom_boxplot(
+    width = 0.12, outlier.shape = NA, color = "black",
+    linewidth = 0.4, alpha = 1.0, show.legend = FALSE
+  ) +
+  geom_point(
+    aes(x = as.numeric(age_group) - 0.21),
+    position = position_jitter(width = 0.08, height = 0.5, seed = 42),
+    alpha = 1.0, size = 0.25, show.legend = FALSE
+  ) +
+  scale_fill_manual(values = colors) +
+  scale_color_manual(values = colors) +
+  scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, by = 20),
+                     name = "Phoneme Score (%)") +
+  scale_x_discrete(name = "Age Group") +
+  ggtitle("e") +
+  theme_nature()
+
+# Panel F: Wave I Amplitude
+data_f <- data %>% filter(!is.na(W1.amp), !is.na(age_group))
+
+if (nrow(data_f) > 0) {
+  y_range <- range(data_f$W1.amp, na.rm = TRUE)
+  y_buffer <- (y_range[2] - y_range[1]) * 0.02
+  y_lim <- c(y_range[1] - y_buffer, y_range[2] + y_buffer)
+  
+  panel_f <- ggplot(data_f, aes(x = age_group, y = W1.amp, fill = age_group, color = age_group)) +
+    geom_point(
+      aes(x = as.numeric(age_group) - 0.30),
+      position = position_jitter(width = 0.06, height = 0, seed = 42),
+      alpha = 0.8, size = 1.3, show.legend = FALSE
+    ) +
+    geom_boxplot(
+      width = 0.18, outlier.shape = NA, color = "black",
+      linewidth = 0.5, alpha = 0.9, show.legend = FALSE
+    ) +
+    stat_summary(
+      aes(x = as.numeric(age_group) + 0.25),
+      fun = mean,
+      fun.min = function(x) mean(x) - sd(x)/sqrt(length(x)),
+      fun.max = function(x) mean(x) + sd(x)/sqrt(length(x)),
+      geom = "errorbar", width = 0.08, linewidth = 0.5, color = "black"
+    ) +
+    stat_summary(
+      aes(x = as.numeric(age_group) + 0.25),
+      fun = mean, geom = "point", size = 2, color = "black"
+    ) +
+    scale_fill_manual(values = colors) +
+    scale_color_manual(values = colors) +
+    scale_y_continuous(limits = y_lim, name = "W1 Amplitude (uV)") +
+    scale_x_discrete(name = "Age Group") +
+    ggtitle("f") +
+    theme_nature()
+} else {
+  panel_f <- ggplot() + ggtitle("f (No Data)") + theme_void()
+}
+
+# Helper function for latency panels with device separation
+make_latency_panel_separate <- function(data_in, wave_var, y_label, panel_letter) {
+  data_plot <- data_in %>%
+    filter(!is.na(!!sym(wave_var)), !is.na(age_group), !is.na(Device)) %>%
+    mutate(
+      device_color = case_when(
+        Device == "Eclipse" ~ colors_eclipse[as.character(age_group)],
+        Device == "Chartr" ~ colors_chartr[as.character(age_group)],
+        TRUE ~ NA_character_
+      )
+    )
+  
+  if (nrow(data_plot) == 0) {
+    return(NULL)
+  }
+  
+  y_range <- range(data_plot[[wave_var]], na.rm = TRUE)
+  y_buffer <- (y_range[2] - y_range[1]) * 0.02
+  y_lim <- c(y_range[1] - y_buffer, y_range[2] + y_buffer)
+  
+  ggplot(
+    data_plot,
+    aes(x = age_group, y = !!sym(wave_var), fill = age_group)
+  ) +
+    geom_point(
+      data = filter(data_plot, Device == "Eclipse"),
+      aes(x = as.numeric(age_group) - 0.37, color = device_color),
+      position = position_jitter(width = 0.06, height = 0, seed = 42),
+      alpha = 0.8, size = pointsz, shape = 16, show.legend = FALSE
+    ) +
+    geom_point(
+      data = filter(data_plot, Device == "Chartr"),
+      aes(x = as.numeric(age_group) - 0.32, color = device_color),
+      position = position_jitter(width = 0.06, height = 0, seed = 42),
+      alpha = 1.0, size = pointsz, shape = 21, stroke = 0.7,
+      fill = NA, show.legend = FALSE
+    ) +
+    geom_point(
+      data = filter(data_plot, Device == "Chartr"),
+      aes(x = as.numeric(age_group) - 0.32, color = device_color),
+      position = position_jitter(width = 0.06, height = 0, seed = 42),
+      alpha = 0.4, size = pointsz - 0.3, shape = 16, show.legend = FALSE
+    ) +
+    scale_color_identity() +
+    geom_boxplot(
+      width = 0.18, outlier.shape = NA, color = "black",
+      linewidth = 0.5, alpha = 0.9, show.legend = FALSE
+    ) +
+    stat_summary(
+      data = filter(data_plot, Device == "Eclipse"),
+      aes(x = as.numeric(age_group) + 0.35),
+      fun = mean,
+      fun.min = function(x) mean(x) - sd(x)/sqrt(length(x)),
+      fun.max = function(x) mean(x) + sd(x)/sqrt(length(x)),
+      geom = "errorbar", width = 0.08, linewidth = 0.6, color = "black", alpha = 0.9
+    ) +
+    stat_summary(
+      data = filter(data_plot, Device == "Eclipse"),
+      aes(x = as.numeric(age_group) + 0.35),
+      fun = mean, geom = "point", size = 2.5, color = "black", alpha = 1.0
+    ) +
+    stat_summary(
+      data = filter(data_plot, Device == "Chartr"),
+      aes(x = as.numeric(age_group) + 0.25),
+      fun = mean,
+      fun.min = function(x) mean(x) - sd(x)/sqrt(length(x)),
+      fun.max = function(x) mean(x) + sd(x)/sqrt(length(x)),
+      geom = "errorbar", width = 0.08, linewidth = 0.6, color = "black", alpha = 0.9
+    ) +
+    stat_summary(
+      data = filter(data_plot, Device == "Chartr"),
+      aes(x = as.numeric(age_group) + 0.25),
+      fun = mean, geom = "point", size = 2.5, color = "black", alpha = 1.0
+    ) +
+    scale_fill_manual(values = colors) +
+    scale_y_continuous(limits = y_lim, name = y_label) +
+    scale_x_discrete(name = "Age Group") +
+    ggtitle(tolower(panel_letter)) +
+    theme_nature()
+}
+
+# Panels G-I: ABR Latencies
+panel_g <- make_latency_panel_separate(data, "W1.Plat", "W1 Latency (ms)", "g")
+panel_h <- make_latency_panel_separate(data, "W3.Plat", "W3 Latency (ms)", "h")
+panel_i <- make_latency_panel_separate(data, "W5.Plat", "W5 Latency (ms)", "i")
+
+# Assemble Figure 2
+figure2 <- (panel_a | panel_b | panel_c) /
+  (panel_d | panel_e | panel_f) /
+  (panel_g | panel_h | panel_i)
+
+# Save Figure 2
+ggsave("output/figures/Figure2_Age_Stratified.pdf",
+       plot = figure2, width = 8.27, height = 11.69, units = "in", dpi = 600)
+
+ggsave("output/figures/Figure2_Age_Stratified.png",
+       plot = figure2, width = 8.27, height = 11.69, units = "in", dpi = 600)
+
+# ==============================================================================
+# END
+# ==============================================================================
