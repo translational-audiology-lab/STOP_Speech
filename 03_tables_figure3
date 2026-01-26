@@ -1,0 +1,386 @@
+# ==============================================================================
+# STOP Speech-ABR Analysis: FIGURE 3 + SUPPLEMENTAL TABLES 5-6
+# ==============================================================================
+# Extended HF hearing loss and synaptopathy predict speech perception in aging
+# Nature Aging
+# ==============================================================================
+
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(broom)
+  library(patchwork)
+})
+
+# ==============================================================================
+# Format p-values in scientific notation
+# ==============================================================================
+
+format_pvalue_scientific <- function(p_values) {
+  sapply(p_values, function(p) {
+    if (is.na(p) || !is.finite(p)) {
+      return("NA")
+    }
+    return(sprintf("%.2e", p))
+  })
+}
+
+# ==============================================================================
+# Fit polynomial models and select best using AIC
+# ==============================================================================
+
+fit_polynomial_models_aic <- function(df, outcome_var, predictor_var) {
+  
+  model_data <- df %>%
+    select(all_of(c(outcome_var, predictor_var))) %>%
+    filter(!is.na(.[[outcome_var]]), !is.na(.[[predictor_var]]),
+           is.finite(.[[outcome_var]]), is.finite(.[[predictor_var]]))
+  
+  if (nrow(model_data) < 10) {
+    return(list(
+      n = nrow(model_data),
+      r2_linear = NA, r2_quadratic = NA, r2_cubic = NA,
+      p_linear = NA, p_quadratic = NA, p_cubic = NA,
+      aic_linear = NA, aic_quadratic = NA, aic_cubic = NA,
+      best_model = "Insufficient data", best_r2 = NA, best_p = NA, best_aic = NA
+    ))
+  }
+  
+  X <- model_data[[predictor_var]]
+  X_centered <- X - mean(X)
+  model_data$X_centered <- X_centered
+  model_data$X2 <- X_centered^2
+  model_data$X3 <- X_centered^3
+  
+  m_linear <- lm(as.formula(paste(outcome_var, "~ X_centered")), data = model_data)
+  m_quad <- lm(as.formula(paste(outcome_var, "~ X_centered + X2")), data = model_data)
+  m_cubic <- lm(as.formula(paste(outcome_var, "~ X_centered + X2 + X3")), data = model_data)
+  
+  r2_linear <- summary(m_linear)$r.squared
+  r2_quad <- summary(m_quad)$r.squared
+  r2_cubic <- summary(m_cubic)$r.squared
+  
+  fstat_linear <- summary(m_linear)$fstatistic
+  p_linear <- 1 - pf(fstat_linear[1], fstat_linear[2], fstat_linear[3])
+  
+  anova_quad <- anova(m_linear, m_quad)
+  p_quad <- anova_quad$`Pr(>F)`[2]
+  
+  anova_cubic <- anova(m_quad, m_cubic)
+  p_cubic <- anova_cubic$`Pr(>F)`[2]
+  
+  # AIC-based model selection
+  aic_linear <- AIC(m_linear)
+  aic_quad <- AIC(m_quad)
+  aic_cubic <- AIC(m_cubic)
+  
+  aic_values <- c(aic_linear, aic_quad, aic_cubic)
+  model_names <- c("Linear", "Quadratic", "Cubic")
+  best_idx <- which.min(aic_values)
+  best_model <- model_names[best_idx]
+  
+  if (best_model == "Linear") {
+    best_r2 <- r2_linear
+    best_p <- p_linear
+    best_aic <- aic_linear
+  } else if (best_model == "Quadratic") {
+    best_r2 <- r2_quad
+    best_p <- p_quad
+    best_aic <- aic_quad
+  } else {
+    best_r2 <- r2_cubic
+    best_p <- p_cubic
+    best_aic <- aic_cubic
+  }
+  
+  return(list(
+    n = nrow(model_data),
+    r2_linear = r2_linear,
+    r2_quadratic = r2_quad,
+    r2_cubic = r2_cubic,
+    p_linear = p_linear,
+    p_quadratic = p_quad,
+    p_cubic = p_cubic,
+    aic_linear = aic_linear,
+    aic_quadratic = aic_quad,
+    aic_cubic = aic_cubic,
+    best_model = best_model,
+    best_r2 = best_r2,
+    best_p = best_p,
+    best_aic = best_aic
+  ))
+}
+
+# ==============================================================================
+# Load data
+# ==============================================================================
+
+data <- readRDS("output/data_clean.rds")
+
+# ==============================================================================
+# Generate Table S5: Age effects with polynomial regression
+# ==============================================================================
+
+variables_age <- c("PTA4", "PTAHF", "Oae_5273", "WS", "PS", 
+                   "W1.amp", "W1.Plat", "W3.Plat", "W5.Plat")
+
+var_labels <- c(
+  "PTA4" = "PTA4",
+  "PTAHF" = "PTAHF",
+  "Oae_5273" = "OAE",
+  "WS" = "WS",
+  "PS" = "PS",
+  "W1.amp" = "W1.Amplitude",
+  "W1.Plat" = "W1.Latency",
+  "W3.Plat" = "W3.Latency",
+  "W5.Plat" = "W5.Latency"
+)
+
+results_age <- list()
+best_fit_models <- list()
+
+for (var in variables_age) {
+  if (var == "W1.amp") {
+    analysis_data <- data %>% filter(!is.na(Device) & Device == "Eclipse")
+  } else {
+    analysis_data <- data
+  }
+  
+  result <- fit_polynomial_models_aic(analysis_data, var, "Age")
+  
+  results_age[[var]] <- data.frame(
+    Variable = var_labels[var],
+    n = result$n,
+    R2_linear = sprintf("%.4f", result$r2_linear),
+    p_linear = format_pvalue_scientific(result$p_linear),
+    AIC_linear = sprintf("%.2f", result$aic_linear),
+    R2_quadratic = sprintf("%.4f", result$r2_quadratic),
+    p_quadratic = format_pvalue_scientific(result$p_quadratic),
+    AIC_quadratic = sprintf("%.2f", result$aic_quadratic),
+    R2_cubic = sprintf("%.4f", result$r2_cubic),
+    p_cubic = format_pvalue_scientific(result$p_cubic),
+    AIC_cubic = sprintf("%.2f", result$aic_cubic),
+    Best_fit = result$best_model
+  )
+  
+  best_fit_models[[var]] <- list(
+    model = result$best_model,
+    r2 = result$best_r2,
+    p = result$best_p
+  )
+}
+
+supp_table5 <- bind_rows(results_age)
+write.table(supp_table5, "output/SuppTable5_Age_effects.csv", 
+            row.names = FALSE, sep = ";", quote = FALSE)
+
+saveRDS(best_fit_models, "output/best_fit_models.rds")
+
+# ==============================================================================
+# Generate Table S6: Age × Sex effects
+# ==============================================================================
+
+data_analysis <- data %>%
+  filter(!is.na(WS), !is.na(PS), !is.na(Age), !is.na(Sex)) %>%
+  filter(is.finite(WS), is.finite(PS), is.finite(Age)) %>%
+  mutate(
+    Sex = relevel(as.factor(Sex), ref = "Man"),
+    Age_c = Age - mean(Age, na.rm = TRUE),
+    Age_sq = Age_c^2,
+    Age_cu = Age_c^3,
+    SexWoman = ifelse(Sex == "Woman", 1, 0)
+  )
+
+all_results <- list()
+outcomes <- c("WS", "PS")
+model_specs <- list(
+  model_1.1 = list(formula_str = "~ Age_c", label = "1.1_Age"),
+  model_1.2 = list(formula_str = "~ Age_c + Age_sq", label = "1.2_Age_quad"),
+  model_1.3 = list(formula_str = "~ Age_c + Age_sq + Age_cu", label = "1.3_Age_cubic"),
+  model_1.4 = list(formula_str = "~ SexWoman", label = "1.4_Sex"),
+  model_1.5 = list(formula_str = "~ Age_c + SexWoman", label = "1.5_Age_Sex"),
+  model_1.6 = list(formula_str = "~ Age_c * SexWoman", label = "1.6_Age_x_Sex")
+)
+
+for (outcome in outcomes) {
+  for (model_name in names(model_specs)) {
+    spec <- model_specs[[model_name]]
+    formula_obj <- as.formula(paste(outcome, spec$formula_str))
+    m <- lm(formula_obj, data = data_analysis)
+    
+    tidy_results <- tidy(m, conf.int = TRUE) %>%
+      mutate(
+        model = spec$label,
+        outcome = outcome,
+        estimate = round(estimate, 4),
+        std.error = round(std.error, 4),
+        statistic = round(statistic, 4),
+        p.value = format_pvalue_scientific(p.value),
+        conf.low = round(conf.low, 4),
+        conf.high = round(conf.high, 4)
+      ) %>%
+      select(model, outcome, term, estimate, std.error, statistic, p.value, conf.low, conf.high)
+    
+    all_results[[paste(outcome, spec$label, sep = "_")]] <- tidy_results
+  }
+}
+
+supp_table6 <- bind_rows(all_results) %>%
+  arrange(outcome, match(model, c("1.1_Age", "1.4_Sex", "1.2_Age_quad", "1.3_Age_cubic", 
+                                  "1.5_Age_Sex", "1.6_Age_x_Sex")))
+
+write.csv(supp_table6, "output/SuppTable6_Age_x_Sex_effects.csv", 
+          row.names = FALSE, quote = FALSE)
+
+# ==============================================================================
+# Create Figure 3: Age vs Auditory Variables (3×3 matrix)
+# ==============================================================================
+
+best_fit_models <- readRDS("output/best_fit_models.rds")
+
+create_corr_plot <- function(df, y_col, y_label, best_model_type, best_r2, best_p, reverse_y = FALSE) {
+  
+  plot_data <- df %>%
+    select(all_of(c("Age", y_col))) %>%
+    filter(!is.na(Age), !is.na(.[[y_col]]),
+           is.finite(Age), is.finite(.[[y_col]]))
+  
+  if (nrow(plot_data) < 3) {
+    return(ggplot() + theme_void() +
+             annotate("text", x = 0.5, y = 0.5, label = "Insufficient data", size = 4))
+  }
+  
+  X_centered <- scale(plot_data$Age, scale = FALSE)
+  plot_data_poly <- plot_data
+  plot_data_poly$Age_centered <- as.numeric(X_centered)
+  plot_data_poly$Age2 <- plot_data_poly$Age_centered^2
+  plot_data_poly$Age3 <- plot_data_poly$Age_centered^3
+  
+  m_linear <- lm(as.formula(paste(y_col, "~ Age_centered")), data = plot_data_poly)
+  m_quad <- lm(as.formula(paste(y_col, "~ Age_centered + Age2")), data = plot_data_poly)
+  m_cubic <- lm(as.formula(paste(y_col, "~ Age_centered + Age2 + Age3")), data = plot_data_poly)
+  
+  if (best_model_type == "Linear") {
+    m_best <- m_linear
+    line_color <- "#1f77b4"
+  } else if (best_model_type == "Quadratic") {
+    m_best <- m_quad
+    line_color <- "#ff7f0e"
+  } else {
+    m_best <- m_cubic
+    line_color <- "#d62728"
+  }
+  
+  x_min <- min(plot_data$Age)
+  x_max <- max(plot_data$Age)
+  x_range <- seq(x_min, x_max, length.out = 200)
+  
+  if (best_model_type == "Linear") {
+    Age_centered_range <- x_range - mean(plot_data$Age)
+    pred_df <- data.frame(Age_centered = Age_centered_range)
+    pred_fit <- predict(m_best, newdata = pred_df, se.fit = TRUE)
+  } else if (best_model_type == "Quadratic") {
+    Age_centered_range <- x_range - mean(plot_data$Age)
+    pred_df <- data.frame(Age_centered = Age_centered_range, Age2 = Age_centered_range^2)
+    pred_fit <- predict(m_best, newdata = pred_df, se.fit = TRUE)
+  } else {
+    Age_centered_range <- x_range - mean(plot_data$Age)
+    pred_df <- data.frame(Age_centered = Age_centered_range, 
+                          Age2 = Age_centered_range^2, 
+                          Age3 = Age_centered_range^3)
+    pred_fit <- predict(m_best, newdata = pred_df, se.fit = TRUE)
+  }
+  
+  fit_data <- data.frame(x = x_range, y = pred_fit$fit, se = pred_fit$se.fit)
+  
+  p <- ggplot(plot_data, aes(x = Age, y = .data[[y_col]])) +
+    geom_point(alpha = 0.4, size = 2, color = "gray40") +
+    geom_line(data = fit_data, aes(x = x, y = y),
+              color = line_color, size = 1, linetype = "solid") +
+    geom_ribbon(data = fit_data, aes(x = x, ymin = y - 1.96*se, ymax = y + 1.96*se),
+                alpha = 0.15, fill = line_color, inherit.aes = FALSE)
+  
+  if (reverse_y) {
+    p <- p + scale_y_reverse(name = y_label)
+  } else {
+    p <- p + scale_y_continuous(name = y_label)
+  }
+  
+  p_text <- format_pvalue_scientific(best_p)
+  subtitle_text <- bquote(italic(R)^2 ~ "=" ~ .(sprintf("%.3f", best_r2)) ~ 
+                            ", " ~ italic(p) ~ "=" ~ .(p_text))
+  
+  p <- p +
+    scale_x_continuous(name = "Age (years)") +
+    theme_minimal() +
+    theme(
+      axis.title = element_text(size = 12, face = "plain", family = "Helvetica"),
+      axis.text = element_text(size = 11, family = "Helvetica"),
+      axis.ticks = element_blank(),
+      panel.grid.major = element_line(color = "gray90", linewidth = 0.3),
+      panel.grid.minor = element_blank(),
+      plot.margin = unit(c(0.3, 0.3, 0.3, 0.3), "cm"),
+      plot.subtitle = element_text(size = 10, hjust = 0.5, family = "Helvetica"),
+      aspect.ratio = 1
+    ) +
+    labs(subtitle = subtitle_text)
+  
+  return(p)
+}
+
+data_all <- data %>%
+  filter(!is.na(WS), !is.na(PS)) %>%
+  filter(is.finite(WS), is.finite(PS))
+
+data_eclipse <- data_all %>%
+  filter(Device == "Eclipse") %>%
+  filter(!is.na(W1.amp), is.finite(W1.amp))
+
+p_a <- create_corr_plot(data_all, "PTA4", "PTA4 (dB HL)", 
+                        best_fit_models$PTA4$model, best_fit_models$PTA4$r2, 
+                        best_fit_models$PTA4$p, reverse_y = TRUE)
+
+p_b <- create_corr_plot(data_all, "PTAHF", "PTAHF (dB HL)", 
+                        best_fit_models$PTAHF$model, best_fit_models$PTAHF$r2, 
+                        best_fit_models$PTAHF$p, reverse_y = TRUE)
+
+p_c <- create_corr_plot(data_all, "Oae_5273", "OAE SNR (dB)", 
+                        best_fit_models$Oae_5273$model, best_fit_models$Oae_5273$r2, 
+                        best_fit_models$Oae_5273$p, reverse_y = FALSE)
+
+p_d <- create_corr_plot(data_all, "WS", "Word Score (%)", 
+                        best_fit_models$WS$model, best_fit_models$WS$r2, 
+                        best_fit_models$WS$p, reverse_y = FALSE)
+
+p_e <- create_corr_plot(data_all, "PS", "Phoneme Score (%)", 
+                        best_fit_models$PS$model, best_fit_models$PS$r2, 
+                        best_fit_models$PS$p, reverse_y = FALSE)
+
+p_f <- create_corr_plot(data_eclipse, "W1.amp", "Wave I Amplitude", 
+                        best_fit_models$W1.amp$model, best_fit_models$W1.amp$r2, 
+                        best_fit_models$W1.amp$p, reverse_y = FALSE)
+
+p_g <- create_corr_plot(data_all, "W1.Plat", "Wave I Latency (ms)", 
+                        best_fit_models$W1.Plat$model, best_fit_models$W1.Plat$r2, 
+                        best_fit_models$W1.Plat$p, reverse_y = FALSE)
+
+p_h <- create_corr_plot(data_all, "W3.Plat", "Wave III Latency (ms)", 
+                        best_fit_models$W3.Plat$model, best_fit_models$W3.Plat$r2, 
+                        best_fit_models$W3.Plat$p, reverse_y = FALSE)
+
+p_i <- create_corr_plot(data_all, "W5.Plat", "Wave V Latency (ms)", 
+                        best_fit_models$W5.Plat$model, best_fit_models$W5.Plat$r2, 
+                        best_fit_models$W5.Plat$p, reverse_y = FALSE)
+
+fig_combined <- (p_a | p_b | p_c) /
+  (p_d | p_e | p_f) /
+  (p_g | p_h | p_i)
+
+ggsave("output/figures/Figure3_Age_vs_Auditory_3x3.pdf",
+       fig_combined, width = 14, height = 13, dpi = 300)
+
+ggsave("output/figures/Figure3_Age_vs_Auditory_3x3.png",
+       fig_combined, width = 14, height = 13, dpi = 300)
+
+# ==============================================================================
+# END
+# ==============================================================================
