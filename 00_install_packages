@@ -1,0 +1,76 @@
+# ==============================================================================
+# STOP Speech-ABR Analysis: Package Installation
+# ==============================================================================
+# Project: Extended HF Hearing Loss vs Synaptopathy predicting Speech
+# Target: Nature Aging
+# Author: Christopher R. Cederroth
+# Date: January 2026
+# ==============================================================================
+
+cat("========================================\n")
+cat("Installing Required R Packages\n")
+cat("This may take 5-10 minutes on first run\n")
+cat("========================================\n\n")
+
+# List of required packages
+packages <- c(
+  # Data manipulation
+  "tidyverse",      # Includes dplyr, ggplot2, readr, tidyr
+  "readr",          # Fast CSV reading with locale support
+  "data.table",     # Fast data manipulation
+  
+  # Statistical modeling
+  "broom",          # Tidy model outputs
+  "car",            # VIF, model diagnostics
+  "MuMIn",          # AICc calculation
+  "lmtest",         # Model comparison tests
+  "emmeans",        # Estimated marginal means
+  
+  # Figure creation
+  "ggplot2",        # Main plotting (in tidyverse but listed for clarity)
+  "patchwork",      # Combine multiple plots
+  "ggpubr",         # Publication themes
+  "scales",         # Axis formatting
+  "ggrepel",        # Non-overlapping labels
+  "cowplot",        # Publication-ready themes
+  
+  # Tables
+  "gt",             # Publication tables
+  "kableExtra",     # Alternative table formatting
+  "flextable",      # Word-compatible tables
+  "knitr",          # Table rendering
+  
+  # Misc
+  "here",           # Project-relative paths
+  "janitor",        # Clean column names
+  "VennDiagram"     # Variance partitioning plots
+)
+
+# Function to install missing packages
+install_if_missing <- function(pkg) {
+  if (!require(pkg, character.only = TRUE, quietly = TRUE)) {
+    cat(paste0("Installing: ", pkg, "\n"))
+    install.packages(pkg, dependencies = TRUE, quiet = FALSE)
+    library(pkg, character.only = TRUE)
+    cat(paste0("✓ ", pkg, " installed and loaded\n\n"))
+  } else {
+    cat(paste0("✓ ", pkg, " already installed\n"))
+  }
+}
+
+# Install all packages
+cat("\n--- Starting package installation ---\n\n")
+invisible(lapply(packages, install_if_missing))
+
+cat("\n========================================\n")
+cat("✓ All packages installed successfully!\n")
+cat("========================================\n\n")
+
+# Test key functions
+cat("Testing key functions:\n")
+cat(paste0("  - tidyverse version: ", packageVersion("tidyverse"), "\n"))
+cat(paste0("  - ggplot2 version: ", packageVersion("ggplot2"), "\n"))
+cat(paste0("  - broom version: ", packageVersion("broom"), "\n"))
+cat(paste0("  - knitr version: ", packageVersion("knitr"), "\n"))
+
+cat("\n✓ Setup complete! Proceed to 01_data_import.R\n")
