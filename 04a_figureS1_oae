@@ -1,0 +1,239 @@
+# ==============================================================================
+# STOP Speech-ABR Analysis: SUPPLEMENTAL FIGURE 1 - OAE vs SPEECH
+# ==============================================================================
+# Extended HF hearing loss and synaptopathy predict speech perception in aging
+# Nature Aging
+# ==============================================================================
+
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(broom)
+  library(patchwork)
+})
+
+# ==============================================================================
+# Format p-values in scientific notation
+# ==============================================================================
+
+format_pvalue_scientific <- function(p_values) {
+  sapply(p_values, function(p) {
+    if (is.na(p) || !is.finite(p)) {
+      return("NA")
+    }
+    return(sprintf("%.2e", p))
+  })
+}
+
+# ==============================================================================
+# Fit polynomial models and select best using AIC
+# ==============================================================================
+
+fit_polynomial_models_aic <- function(df, outcome_var, predictor_var) {
+  
+  model_data <- df %>%
+    select(all_of(c(outcome_var, predictor_var))) %>%
+    filter(!is.na(.[[outcome_var]]), !is.na(.[[predictor_var]]),
+           is.finite(.[[outcome_var]]), is.finite(.[[predictor_var]]))
+  
+  if (nrow(model_data) < 10) {
+    return(list(
+      n = nrow(model_data),
+      r2_linear = NA, r2_quadratic = NA, r2_cubic = NA,
+      p_linear = NA, p_quadratic = NA, p_cubic = NA,
+      aic_linear = NA, aic_quadratic = NA, aic_cubic = NA,
+      best_model = "Insufficient data", best_r2 = NA, best_p = NA, best_aic = NA
+    ))
+  }
+  
+  X <- model_data[[predictor_var]]
+  X_centered <- X - mean(X)
+  model_data$X_centered <- X_centered
+  model_data$X2 <- X_centered^2
+  model_data$X3 <- X_centered^3
+  
+  m_linear <- lm(as.formula(paste(outcome_var, "~ X_centered")), data = model_data)
+  m_quad <- lm(as.formula(paste(outcome_var, "~ X_centered + X2")), data = model_data)
+  m_cubic <- lm(as.formula(paste(outcome_var, "~ X_centered + X2 + X3")), data = model_data)
+  
+  r2_linear <- summary(m_linear)$r.squared
+  r2_quad <- summary(m_quad)$r.squared
+  r2_cubic <- summary(m_cubic)$r.squared
+  
+  fstat_linear <- summary(m_linear)$fstatistic
+  p_linear <- 1 - pf(fstat_linear[1], fstat_linear[2], fstat_linear[3])
+  
+  anova_quad <- anova(m_linear, m_quad)
+  p_quad <- anova_quad$`Pr(>F)`[2]
+  
+  anova_cubic <- anova(m_quad, m_cubic)
+  p_cubic <- anova_cubic$`Pr(>F)`[2]
+  
+  aic_linear <- AIC(m_linear)
+  aic_quad <- AIC(m_quad)
+  aic_cubic <- AIC(m_cubic)
+  
+  aic_values <- c(aic_linear, aic_quad, aic_cubic)
+  model_names <- c("Linear", "Quadratic", "Cubic")
+  best_idx <- which.min(aic_values)
+  best_model <- model_names[best_idx]
+  
+  if (best_model == "Linear") {
+    best_r2 <- r2_linear
+    best_p <- p_linear
+    best_aic <- aic_linear
+  } else if (best_model == "Quadratic") {
+    best_r2 <- r2_quad
+    best_p <- p_quad
+    best_aic <- aic_quad
+  } else {
+    best_r2 <- r2_cubic
+    best_p <- p_cubic
+    best_aic <- aic_cubic
+  }
+  
+  return(list(
+    n = nrow(model_data),
+    r2_linear = r2_linear,
+    r2_quadratic = r2_quad,
+    r2_cubic = r2_cubic,
+    p_linear = p_linear,
+    p_quadratic = p_quad,
+    p_cubic = p_cubic,
+    aic_linear = aic_linear,
+    aic_quadratic = aic_quad,
+    aic_cubic = aic_cubic,
+    best_model = best_model,
+    best_r2 = best_r2,
+    best_p = best_p,
+    best_aic = best_aic
+  ))
+}
+
+# ==============================================================================
+# Load data
+# ==============================================================================
+
+data <- readRDS("output/data_clean.rds")
+
+# ==============================================================================
+# Create Supplemental Figure 1: 2×1 OAE vs Speech Outcomes
+# ==============================================================================
+
+data_plot <- data %>%
+  filter(!is.na(Oae_5273), !is.na(WS), !is.na(PS)) %>%
+  filter(is.finite(Oae_5273), is.finite(WS), is.finite(PS))
+
+# Analyze OAE vs WS
+result_ws <- fit_polynomial_models_aic(data_plot, "WS", "Oae_5273")
+
+# Analyze OAE vs PS
+result_ps <- fit_polynomial_models_aic(data_plot, "PS", "Oae_5273")
+
+# ==============================================================================
+# Create correlation plot function
+# ==============================================================================
+
+create_corr_plot <- function(df, x_col, y_col, y_label, best_model_type, best_r2, best_p) {
+  
+  plot_data <- df %>%
+    select(all_of(c(x_col, y_col))) %>%
+    filter(!is.na(.[[x_col]]), !is.na(.[[y_col]]),
+           is.finite(.[[x_col]]), is.finite(.[[y_col]]))
+  
+  if (nrow(plot_data) < 3) {
+    return(ggplot() + theme_void())
+  }
+  
+  X_centered <- scale(plot_data[[x_col]], scale = FALSE)
+  plot_data_poly <- plot_data
+  plot_data_poly$X_centered <- as.numeric(X_centered)
+  plot_data_poly$X2 <- plot_data_poly$X_centered^2
+  plot_data_poly$X3 <- plot_data_poly$X_centered^3
+  
+  m_linear <- lm(as.formula(paste(y_col, "~ X_centered")), data = plot_data_poly)
+  m_quad <- lm(as.formula(paste(y_col, "~ X_centered + X2")), data = plot_data_poly)
+  m_cubic <- lm(as.formula(paste(y_col, "~ X_centered + X2 + X3")), data = plot_data_poly)
+  
+  if (best_model_type == "Linear") {
+    m_best <- m_linear
+    line_color <- "#1f77b4"
+  } else if (best_model_type == "Quadratic") {
+    m_best <- m_quad
+    line_color <- "#ff7f0e"
+  } else {
+    m_best <- m_cubic
+    line_color <- "#d62728"
+  }
+  
+  x_min <- min(plot_data[[x_col]])
+  x_max <- max(plot_data[[x_col]])
+  x_range <- seq(x_min, x_max, length.out = 200)
+  
+  if (best_model_type == "Linear") {
+    X_center_range <- x_range - mean(plot_data[[x_col]])
+    pred_df <- data.frame(X_centered = X_center_range)
+    pred_fit <- predict(m_best, newdata = pred_df, se.fit = TRUE)
+  } else if (best_model_type == "Quadratic") {
+    X_center_range <- x_range - mean(plot_data[[x_col]])
+    pred_df <- data.frame(X_centered = X_center_range, X2 = X_center_range^2)
+    pred_fit <- predict(m_best, newdata = pred_df, se.fit = TRUE)
+  } else {
+    X_center_range <- x_range - mean(plot_data[[x_col]])
+    pred_df <- data.frame(X_centered = X_center_range, 
+                         X2 = X_center_range^2, 
+                         X3 = X_center_range^3)
+    pred_fit <- predict(m_best, newdata = pred_df, se.fit = TRUE)
+  }
+  
+  fit_data <- data.frame(x = x_range, y = pred_fit$fit, se = pred_fit$se.fit)
+  
+  p <- ggplot(plot_data, aes(x = .data[[x_col]], y = .data[[y_col]])) +
+    geom_point(alpha = 0.4, size = 2.5, color = "gray40") +
+    geom_line(data = fit_data, aes(x = x, y = y),
+              color = line_color, size = 1.2, linetype = "solid") +
+    geom_ribbon(data = fit_data, aes(x = x, ymin = y - 1.96*se, ymax = y + 1.96*se),
+                alpha = 0.15, fill = line_color, inherit.aes = FALSE)
+  
+  p_text <- format_pvalue_scientific(best_p)
+  subtitle_text <- bquote(italic(R)^2 ~ "=" ~ .(sprintf("%.3f", best_r2)) ~ 
+                          ", " ~ italic(p) ~ "=" ~ .(p_text))
+  
+  p <- p +
+    scale_x_continuous(name = "OAE SNR (dB)") +
+    scale_y_continuous(name = y_label) +
+    theme_minimal() +
+    theme(
+      axis.title = element_text(size = 12, face = "plain", family = "Helvetica"),
+      axis.text = element_text(size = 11, family = "Helvetica"),
+      axis.ticks = element_blank(),
+      panel.grid.major = element_line(color = "gray90", linewidth = 0.3),
+      panel.grid.minor = element_blank(),
+      plot.margin = unit(c(0.3, 0.3, 0.3, 0.3), "cm"),
+      plot.subtitle = element_text(size = 11, hjust = 0.5, family = "Helvetica"),
+      aspect.ratio = 1
+    ) +
+    labs(subtitle = subtitle_text)
+  
+  return(p)
+}
+
+# Panel A: OAE vs Word Score
+panel_a <- create_corr_plot(data_plot, "Oae_5273", "WS", "Word Score (%)",
+                            result_ws$best_model, result_ws$best_r2, result_ws$best_p)
+
+# Panel B: OAE vs Phoneme Score
+panel_b <- create_corr_plot(data_plot, "Oae_5273", "PS", "Phoneme Score (%)",
+                            result_ps$best_model, result_ps$best_r2, result_ps$best_p)
+
+# Combine 2×1 layout
+fig_combined <- panel_a | panel_b
+
+ggsave("output/figures/SuppFigure1_OAE_vs_Speech_2x1.pdf",
+       fig_combined, width = 12, height = 5, dpi = 300)
+
+ggsave("output/figures/SuppFigure1_OAE_vs_Speech_2x1.png",
+       fig_combined, width = 12, height = 5, dpi = 300)
+
+# ==============================================================================
+# END
+# ==============================================================================
