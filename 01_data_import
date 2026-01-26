@@ -1,0 +1,158 @@
+# ==============================================================================
+# STOP Speech-ABR Analysis: Data Import & Diagnostics
+# ==============================================================================
+# Project: Extended HF Hearing Loss vs Synaptopathy predicting Speech
+# Target: Nature Aging
+# Author: Christopher R. Cederroth
+# Date: January 2026
+# ==============================================================================
+
+# Load required libraries
+library(tidyverse)
+library(readr)
+
+cat("========================================\n")
+cat("Step 1: Data Import & Diagnostics\n")
+cat("========================================\n\n")
+
+# ==============================================================================
+# 1. IMPORT DATA (European CSV format: semicolon separator, comma decimal)
+# ==============================================================================
+
+cat("Loading CSV file: STOP_speech_ABR_clean_v2.csv\n")
+
+# Read European format CSV
+data_raw <- read_delim(
+  "STOP_speech_ABR_clean_v2.csv",
+  delim = ";",                                    # European CSV uses semicolon
+  locale = locale(decimal_mark = ",",             # Comma for decimals
+                  grouping_mark = "."),           # Period for thousands
+  col_types = cols(
+    `Subject ID` = col_character(),
+    Age = col_double(),
+    Sex = col_character(),
+    Device = col_character(),
+    .default = col_double()
+  ),
+  na = c("", "NA", "N/A", " ", ".")
+)
+
+cat(paste0("✓ Loaded ", nrow(data_raw), " rows and ", ncol(data_raw), " columns\n\n"))
+
+# ==============================================================================
+# 2. DATA DIAGNOSTICS
+# ==============================================================================
+
+cat("--- DATA STRUCTURE ---\n")
+cat("First 5 rows:\n")
+print(head(data_raw, 5))
+
+cat("\n--- COLUMN NAMES ---\n")
+print(colnames(data_raw))
+
+cat("\n--- KEY VARIABLE SUMMARY ---\n")
+cat(paste0("Age: ", sum(!is.na(data_raw$Age)), " non-missing values\n"))
+cat(paste0("  Range: ", min(data_raw$Age, na.rm=TRUE), " to ", 
+           max(data_raw$Age, na.rm=TRUE), " years\n"))
+
+cat(paste0("Sex: ", table(data_raw$Sex), "\n"))
+
+cat(paste0("PTA4: ", sum(!is.na(data_raw$PTA4)), " non-missing values\n"))
+cat(paste0("  Range: ", round(min(data_raw$PTA4, na.rm=TRUE), 1), " to ", 
+           round(max(data_raw$PTA4, na.rm=TRUE), 1), " dB HL\n"))
+
+cat(paste0("PTAHF: ", sum(!is.na(data_raw$PTAHF)), " non-missing values\n"))
+cat(paste0("  Range: ", round(min(data_raw$PTAHF, na.rm=TRUE), 1), " to ", 
+           round(max(data_raw$PTAHF, na.rm=TRUE), 1), " dB HL\n"))
+
+cat(paste0("UCL8000 (LDL at 8 kHz): ", sum(!is.na(data_raw$UCL8000)), " non-missing values\n"))
+cat(paste0("  Range: ", round(min(data_raw$UCL8000, na.rm=TRUE), 1), " to ", 
+           round(max(data_raw$UCL8000, na.rm=TRUE), 1), " dB HL\n"))
+
+cat(paste0("Oae_5273: ", sum(!is.na(data_raw$Oae_5273)), " non-missing values\n"))
+cat(paste0("  Range: ", round(min(data_raw$Oae_5273, na.rm=TRUE), 1), " to ", 
+           round(max(data_raw$Oae_5273, na.rm=TRUE), 1), " dB SNR\n"))
+
+cat(paste0("WS (Word Score): ", sum(!is.na(data_raw$WS)), " non-missing values\n"))
+cat(paste0("  Range: ", round(min(data_raw$WS, na.rm=TRUE), 1), " to ", 
+           round(max(data_raw$WS, na.rm=TRUE), 1), "%\n"))
+
+cat(paste0("PS (Phoneme Score): ", sum(!is.na(data_raw$PS)), " non-missing values\n"))
+cat(paste0("  Range: ", round(min(data_raw$PS, na.rm=TRUE), 1), " to ", 
+           round(max(data_raw$PS, na.rm=TRUE), 1), "%\n"))
+
+cat("\n--- ABR VARIABLES ---\n")
+cat(paste0("W1.amp (Wave I amplitude): ", sum(!is.na(data_raw$W1.amp)), " non-missing\n"))
+cat(paste0("W1.Plat (Wave I latency): ", sum(!is.na(data_raw$W1.Plat)), " non-missing\n"))
+cat(paste0("W3.Plat (Wave III latency): ", sum(!is.na(data_raw$W3.Plat)), " non-missing\n"))
+cat(paste0("W5.Plat (Wave V latency): ", sum(!is.na(data_raw$W5.Plat)), " non-missing\n"))
+
+cat("\n--- DEVICE DISTRIBUTION ---\n")
+if("Device" %in% colnames(data_raw)) {
+  print(table(data_raw$Device, useNA = "ifany"))
+}
+
+# ==============================================================================
+# 3. CREATE CLEAN DATASET
+# ==============================================================================
+
+cat("\n--- CREATING CLEAN DATASET ---\n")
+
+data <- data_raw %>%
+  mutate(
+    # Ensure proper factor levels
+    Sex = factor(Sex, levels = c("Man", "Woman")),
+    Device = factor(Device, levels = c("Chartr", "Eclipse")),
+    
+    # Create age groups (as used in manuscript)
+    age_group = cut(Age,
+                    breaks = c(0, 35, 45, 55, 65, 75, 100),
+                    labels = c("<35", "35-44", "45-54", "55-64", "65-74", "75+"),
+                    include.lowest = TRUE, 
+                    right = FALSE),
+    
+    # Create PTAHF tertiles for stratification
+    ptahf_tertile = ntile(PTAHF, 3)
+  )
+
+# Add tertile labels
+tertile_breaks <- quantile(data$PTAHF, probs = c(0, 1/3, 2/3, 1), na.rm = TRUE)
+data$ptahf_tertile_label <- cut(
+  data$PTAHF, 
+  breaks = tertile_breaks,
+  labels = c("Low eHF loss", "Medium eHF loss", "High eHF loss"),
+  include.lowest = TRUE
+)
+
+# Calculate inter-wave latencies
+data <- data %>%
+  mutate(
+    I_III_latency = W3.Plat - W1.Plat,
+    I_V_latency = W5.Plat - W1.Plat,
+    III_V_latency = W5.Plat - W3.Plat
+  )
+
+cat("✓ Clean dataset created\n")
+cat(paste0("  Total ears: ", nrow(data), "\n"))
+cat(paste0("  Age groups: ", table(data$age_group), "\n"))
+cat(paste0("  PTAHF tertiles: ", table(data$ptahf_tertile_label), "\n"))
+
+# ==============================================================================
+# 4. SAVE CLEANED DATASET
+# ==============================================================================
+
+# Create output directory if it doesn't exist
+if(!dir.exists("output")) dir.create("output")
+
+# Save as RDS for next scripts
+saveRDS(data, "output/data_clean.rds")
+cat("\n✓ Cleaned data saved to: output/data_clean.rds\n")
+
+# Save as CSV for reference (with standard format)
+write.csv(data, "output/data_clean_standard.csv", row.names = FALSE)
+cat("✓ Cleaned data saved to: output/data_clean_standard.csv\n")
+
+cat("\n========================================\n")
+cat("✓ Data import and diagnostics complete!\n")
+cat("Next: Run 02_demographic_tables.R\n")
+cat("========================================\n")
