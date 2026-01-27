@@ -1,8 +1,13 @@
 # ==============================================================================
-# STOP Speech-ABR Analysis: FIGURE 3 + SUPPLEMENTAL TABLES 5-6
+# STOP Speech-ABR Analysis: FIGURE 3 + TABLES S5-S6 (LRT-BASED SELECTION)
 # ==============================================================================
 # Extended HF hearing loss and synaptopathy predict speech perception in aging
 # Nature Aging
+# 
+# CHANGE LOG:
+# - Replaced AIC model selection with Hierarchical Likelihood Ratio Tests (LRT)
+# - Sequential testing: Linear → Quadratic (p < 0.05?) → Cubic (p < 0.05?)
+# - Best practice per user specification
 # ==============================================================================
 
 suppressPackageStartupMessages({
@@ -11,10 +16,15 @@ suppressPackageStartupMessages({
   library(patchwork)
 })
 
+cat("════════════════════════════════════════════════════════════════════════\n")
+cat(" FIGURE 3 + SUPPLEMENTAL TABLES 5-6 (LRT-BASED MODEL SELECTION)\n")
+cat("════════════════════════════════════════════════════════════════════════\n\n")
+
 # ==============================================================================
-# Format p-values in scientific notation
+# PART 0: HELPER FUNCTIONS
 # ==============================================================================
 
+# Format p-value with proper scientific notation
 format_pvalue_scientific <- function(p_values) {
   sapply(p_values, function(p) {
     if (is.na(p) || !is.finite(p)) {
@@ -24,12 +34,27 @@ format_pvalue_scientific <- function(p_values) {
   })
 }
 
-# ==============================================================================
-# Fit polynomial models and select best using AIC
-# ==============================================================================
+# Format p-value for display (threshold)
+format_pvalue_display <- function(p) {
+  if (is.na(p) || !is.finite(p)) return("NA")
+  if (p < 0.001) return("<0.001")
+  return(sprintf("%.4f", p))
+}
 
-fit_polynomial_models_aic <- function(df, outcome_var, predictor_var) {
+# ==============================================================================
+# MAIN FUNCTION: Hierarchical LRT-based polynomial model selection
+# ==============================================================================
+# Sequential testing per best practice:
+# Step 1: Is quadratic significantly better than linear? (p_quad < 0.05?)
+#         YES → consider quadratic; proceed to Step 2
+#         NO  → use linear; STOP
+# Step 2: Is cubic significantly better than quadratic? (p_cubic < 0.05?)
+#         YES → use cubic
+#         NO  → use quadratic
+
+fit_polynomial_models_lrt <- function(df, outcome_var, predictor_var, alpha = 0.05) {
   
+  # Data preparation
   model_data <- df %>%
     select(all_of(c(outcome_var, predictor_var))) %>%
     filter(!is.na(.[[outcome_var]]), !is.na(.[[predictor_var]]),
@@ -40,56 +65,69 @@ fit_polynomial_models_aic <- function(df, outcome_var, predictor_var) {
       n = nrow(model_data),
       r2_linear = NA, r2_quadratic = NA, r2_cubic = NA,
       p_linear = NA, p_quadratic = NA, p_cubic = NA,
-      aic_linear = NA, aic_quadratic = NA, aic_cubic = NA,
-      best_model = "Insufficient data", best_r2 = NA, best_p = NA, best_aic = NA
+      best_model = "Insufficient data",
+      best_r2 = NA,
+      best_p = NA,
+      reason = "N < 10"
     ))
   }
   
+  # Center predictor
   X <- model_data[[predictor_var]]
   X_centered <- X - mean(X)
   model_data$X_centered <- X_centered
   model_data$X2 <- X_centered^2
   model_data$X3 <- X_centered^3
   
+  # Fit all three models
   m_linear <- lm(as.formula(paste(outcome_var, "~ X_centered")), data = model_data)
-  m_quad <- lm(as.formula(paste(outcome_var, "~ X_centered + X2")), data = model_data)
-  m_cubic <- lm(as.formula(paste(outcome_var, "~ X_centered + X2 + X3")), data = model_data)
+  m_quad   <- lm(as.formula(paste(outcome_var, "~ X_centered + X2")), data = model_data)
+  m_cubic  <- lm(as.formula(paste(outcome_var, "~ X_centered + X2 + X3")), data = model_data)
   
+  # Extract R² values
   r2_linear <- summary(m_linear)$r.squared
-  r2_quad <- summary(m_quad)$r.squared
-  r2_cubic <- summary(m_cubic)$r.squared
+  r2_quad   <- summary(m_quad)$r.squared
+  r2_cubic  <- summary(m_cubic)$r.squared
   
+  # Get p-value for linear model (F-test on the full model)
   fstat_linear <- summary(m_linear)$fstatistic
   p_linear <- 1 - pf(fstat_linear[1], fstat_linear[2], fstat_linear[3])
   
+  # LRT: Linear vs Quadratic
   anova_quad <- anova(m_linear, m_quad)
   p_quad <- anova_quad$`Pr(>F)`[2]
   
+  # LRT: Quadratic vs Cubic
   anova_cubic <- anova(m_quad, m_cubic)
   p_cubic <- anova_cubic$`Pr(>F)`[2]
   
-  # AIC-based model selection
-  aic_linear <- AIC(m_linear)
-  aic_quad <- AIC(m_quad)
-  aic_cubic <- AIC(m_cubic)
+  # ===========================================================================
+  # HIERARCHICAL LRT DECISION RULE (α = 0.05)
+  # ===========================================================================
   
-  aic_values <- c(aic_linear, aic_quad, aic_cubic)
-  model_names <- c("Linear", "Quadratic", "Cubic")
-  best_idx <- which.min(aic_values)
-  best_model <- model_names[best_idx]
-  
-  if (best_model == "Linear") {
+  if (p_quad < alpha) {
+    # Quadratic is significantly better than linear
+    # Now test: is cubic significantly better than quadratic?
+    if (p_cubic < alpha) {
+      # YES: Cubic is best
+      best_model <- "Cubic"
+      best_r2 <- r2_cubic
+      best_p <- p_cubic
+      reason <- sprintf("Cubic better (p_cubic=%.4f < 0.05)", p_cubic)
+    } else {
+      # NO: Quadratic is best
+      best_model <- "Quadratic"
+      best_r2 <- r2_quad
+      best_p <- p_quad
+      reason <- sprintf("Quadratic best (p_quad=%.4f < 0.05, p_cubic=%.4f ≥ 0.05)", 
+                        p_quad, p_cubic)
+    }
+  } else {
+    # Quadratic NOT significantly better; use linear
+    best_model <- "Linear"
     best_r2 <- r2_linear
     best_p <- p_linear
-    best_aic <- aic_linear
-  } else if (best_model == "Quadratic") {
-    best_r2 <- r2_quad
-    best_p <- p_quad
-    best_aic <- aic_quad
-  } else {
-    best_r2 <- r2_cubic
-    best_p <- p_cubic
-    best_aic <- aic_cubic
+    reason <- sprintf("Linear (p_quad=%.4f ≥ 0.05)", p_quad)
   }
   
   return(list(
@@ -100,27 +138,30 @@ fit_polynomial_models_aic <- function(df, outcome_var, predictor_var) {
     p_linear = p_linear,
     p_quadratic = p_quad,
     p_cubic = p_cubic,
-    aic_linear = aic_linear,
-    aic_quadratic = aic_quad,
-    aic_cubic = aic_cubic,
     best_model = best_model,
     best_r2 = best_r2,
     best_p = best_p,
-    best_aic = best_aic
+    reason = reason
   ))
 }
 
 # ==============================================================================
-# Load data
+# PART 1: LOAD DATA
 # ==============================================================================
 
+cat("Loading cleaned data...\n")
 data <- readRDS("output/data_clean.rds")
+cat(paste0("✓ Loaded ", nrow(data), " ears\n\n"))
 
 # ==============================================================================
-# Generate Table S5: Age effects with polynomial regression
+# PART 2: SUPPLEMENTAL TABLE 5 - AGE EFFECTS (LRT-BASED)
 # ==============================================================================
 
-variables_age <- c("PTA4", "PTAHF", "Oae_5273", "WS", "PS", 
+cat("════════════════════════════════════════════════════════════════════════\n")
+cat("GENERATING SUPPLEMENTAL TABLE 5: AGE EFFECTS (LRT-BASED MODEL SELECTION)\n")
+cat("════════════════════════════════════════════════════════════════════════\n\n")
+
+variables_age <- c("PTA4", "PTAHF", "Oae_5273", "WS", "PS",
                    "W1.amp", "W1.Plat", "W3.Plat", "W5.Plat")
 
 var_labels <- c(
@@ -138,30 +179,45 @@ var_labels <- c(
 results_age <- list()
 best_fit_models <- list()
 
+cat("HIERARCHICAL LRT DECISIONS (α = 0.05):\n")
+cat("(Testing: Linear → Quadratic → Cubic)\n\n")
+
 for (var in variables_age) {
+  
   if (var == "W1.amp") {
     analysis_data <- data %>% filter(!is.na(Device) & Device == "Eclipse")
   } else {
     analysis_data <- data
   }
   
-  result <- fit_polynomial_models_aic(analysis_data, var, "Age")
+  cat(paste0(var, ":\n"))
   
+  result <- fit_polynomial_models_lrt(analysis_data, var, "Age", alpha = 0.05)
+  
+  # Console output with full decision logic
+  cat(sprintf("  n=%d, R²_lin=%.4f, R²_quad=%.4f, R²_cub=%.4f\n",
+              result$n, result$r2_linear, result$r2_quadratic, result$r2_cubic))
+  cat(sprintf("  p_quad=%.4f, p_cubic=%.4f\n", result$p_quadratic, result$p_cubic))
+  cat(sprintf("  → SELECTED: %s (R²=%.4f, %s)\n\n",
+              result$best_model, result$best_r2, result$reason))
+  
+  # Store in results table
   results_age[[var]] <- data.frame(
     Variable = var_labels[var],
     n = result$n,
     R2_linear = sprintf("%.4f", result$r2_linear),
     p_linear = format_pvalue_scientific(result$p_linear),
-    AIC_linear = sprintf("%.2f", result$aic_linear),
     R2_quadratic = sprintf("%.4f", result$r2_quadratic),
     p_quadratic = format_pvalue_scientific(result$p_quadratic),
-    AIC_quadratic = sprintf("%.2f", result$aic_quadratic),
     R2_cubic = sprintf("%.4f", result$r2_cubic),
     p_cubic = format_pvalue_scientific(result$p_cubic),
-    AIC_cubic = sprintf("%.2f", result$aic_cubic),
-    Best_fit = result$best_model
+    Best_fit_model = result$best_model,
+    Best_R2 = sprintf("%.4f", result$best_r2),
+    Decision_rule = result$reason,
+    stringsAsFactors = FALSE
   )
   
+  # Store for Figure 3
   best_fit_models[[var]] <- list(
     model = result$best_model,
     r2 = result$best_r2,
@@ -169,15 +225,27 @@ for (var in variables_age) {
   )
 }
 
+# Bind and save Table S5
 supp_table5 <- bind_rows(results_age)
-write.table(supp_table5, "output/SuppTable5_Age_effects.csv", 
+
+write.table(supp_table5, "output/SuppTable5_Age_effects.csv",
             row.names = FALSE, sep = ";", quote = FALSE)
 
+cat("✓ Saved: output/SuppTable5_Age_effects.csv\n\n")
+
+print(supp_table5, row.names = FALSE)
+
+# Save best-fit models for Figure 3
 saveRDS(best_fit_models, "output/best_fit_models.rds")
+cat("✓ Saved: output/best_fit_models.rds\n\n")
 
 # ==============================================================================
-# Generate Table S6: Age × Sex effects
+# PART 3: SUPPLEMENTAL TABLE 6 - AGE × SEX EFFECTS
 # ==============================================================================
+
+cat("\n════════════════════════════════════════════════════════════════════════\n")
+cat("GENERATING SUPPLEMENTAL TABLE 6: AGE × SEX EFFECTS\n")
+cat("════════════════════════════════════════════════════════════════════════\n\n")
 
 data_analysis <- data %>%
   filter(!is.na(WS), !is.na(PS), !is.na(Age), !is.na(Sex)) %>%
@@ -190,23 +258,30 @@ data_analysis <- data %>%
     SexWoman = ifelse(Sex == "Woman", 1, 0)
   )
 
+cat(paste0("Analysis sample: n = ", nrow(data_analysis), " ears\n"))
+cat(paste0(" Women: ", sum(data_analysis$SexWoman), " (",
+           round(100*sum(data_analysis$SexWoman)/nrow(data_analysis), 1), "%)\n"))
+cat(paste0(" Men: ", sum(!data_analysis$SexWoman), " (",
+           round(100*sum(!data_analysis$SexWoman)/nrow(data_analysis), 1), "%)\n\n"))
+
 all_results <- list()
 outcomes <- c("WS", "PS")
+
 model_specs <- list(
-  model_1.1 = list(formula_str = "~ Age_c", label = "1.1_Age"),
-  model_1.2 = list(formula_str = "~ Age_c + Age_sq", label = "1.2_Age_quad"),
-  model_1.3 = list(formula_str = "~ Age_c + Age_sq + Age_cu", label = "1.3_Age_cubic"),
-  model_1.4 = list(formula_str = "~ SexWoman", label = "1.4_Sex"),
-  model_1.5 = list(formula_str = "~ Age_c + SexWoman", label = "1.5_Age_Sex"),
-  model_1.6 = list(formula_str = "~ Age_c * SexWoman", label = "1.6_Age_x_Sex")
+  model_1.1 = list(formula_str = "~ Age_c", label = "1.1_Age", desc = "Age (linear)"),
+  model_1.2 = list(formula_str = "~ Age_c + Age_sq", label = "1.2_Age_quad", desc = "Age (quadratic)"),
+  model_1.3 = list(formula_str = "~ Age_c + Age_sq + Age_cu", label = "1.3_Age_cubic", desc = "Age (cubic)"),
+  model_1.4 = list(formula_str = "~ SexWoman", label = "1.4_Sex", desc = "Sex only"),
+  model_1.5 = list(formula_str = "~ Age_c + SexWoman", label = "1.5_Age_Sex", desc = "Age + Sex"),
+  model_1.6 = list(formula_str = "~ Age_c * SexWoman", label = "1.6_Age_x_Sex", desc = "Age × Sex interaction")
 )
 
 for (outcome in outcomes) {
+  cat(paste0("Outcome: ", outcome, "\n"))
   for (model_name in names(model_specs)) {
     spec <- model_specs[[model_name]]
     formula_obj <- as.formula(paste(outcome, spec$formula_str))
     m <- lm(formula_obj, data = data_analysis)
-    
     tidy_results <- tidy(m, conf.int = TRUE) %>%
       mutate(
         model = spec$label,
@@ -221,24 +296,37 @@ for (outcome in outcomes) {
       select(model, outcome, term, estimate, std.error, statistic, p.value, conf.low, conf.high)
     
     all_results[[paste(outcome, spec$label, sep = "_")]] <- tidy_results
+    cat(paste0(" ✓ ", spec$desc, "\n"))
   }
+  cat("\n")
 }
 
 supp_table6 <- bind_rows(all_results) %>%
-  arrange(outcome, match(model, c("1.1_Age", "1.4_Sex", "1.2_Age_quad", "1.3_Age_cubic", 
+  arrange(outcome, match(model, c("1.1_Age", "1.4_Sex", "1.2_Age_quad", "1.3_Age_cubic",
                                   "1.5_Age_Sex", "1.6_Age_x_Sex")))
 
-write.csv(supp_table6, "output/SuppTable6_Age_x_Sex_effects.csv", 
+write.csv(supp_table6, "output/SuppTable6_Age_x_Sex_effects.csv",
           row.names = FALSE, quote = FALSE)
 
+cat("✓ Saved: output/SuppTable6_Age_x_Sex_effects.csv\n\n")
+
 # ==============================================================================
-# Create Figure 3: Age vs Auditory Variables (3×3 matrix)
+# PART 4: FIGURE 3 - 3×3 MATRIX (using LRT-selected best-fit models)
 # ==============================================================================
 
+cat("\n════════════════════════════════════════════════════════════════════════\n")
+cat("GENERATING FIGURE 3: 3×3 AGE vs AUDITORY VARIABLES\n")
+cat("(Using LRT-selected polynomial orders from Table S5)\n")
+cat("════════════════════════════════════════════════════════════════════════\n\n")
+
+# Load best-fit models from LRT analysis
 best_fit_models <- readRDS("output/best_fit_models.rds")
 
-create_corr_plot <- function(df, y_col, y_label, best_model_type, best_r2, best_p, reverse_y = FALSE) {
+# Function to create correlation plots using PREDETERMINED best-fit model
+create_corr_plot <- function(df, y_col, y_label, best_model_type, best_r2, best_p, 
+                             reverse_y = FALSE) {
   
+  # Prepare plot data
   plot_data <- df %>%
     select(all_of(c("Age", y_col))) %>%
     filter(!is.na(Age), !is.na(.[[y_col]]),
@@ -249,6 +337,7 @@ create_corr_plot <- function(df, y_col, y_label, best_model_type, best_r2, best_
              annotate("text", x = 0.5, y = 0.5, label = "Insufficient data", size = 4))
   }
   
+  # Fit all models (for prediction lines)
   X_centered <- scale(plot_data$Age, scale = FALSE)
   plot_data_poly <- plot_data
   plot_data_poly$Age_centered <- as.numeric(X_centered)
@@ -256,20 +345,22 @@ create_corr_plot <- function(df, y_col, y_label, best_model_type, best_r2, best_
   plot_data_poly$Age3 <- plot_data_poly$Age_centered^3
   
   m_linear <- lm(as.formula(paste(y_col, "~ Age_centered")), data = plot_data_poly)
-  m_quad <- lm(as.formula(paste(y_col, "~ Age_centered + Age2")), data = plot_data_poly)
-  m_cubic <- lm(as.formula(paste(y_col, "~ Age_centered + Age2 + Age3")), data = plot_data_poly)
+  m_quad   <- lm(as.formula(paste(y_col, "~ Age_centered + Age2")), data = plot_data_poly)
+  m_cubic  <- lm(as.formula(paste(y_col, "~ Age_centered + Age2 + Age3")), data = plot_data_poly)
   
+  # Select model and color based on best_model_type FROM LRT
   if (best_model_type == "Linear") {
     m_best <- m_linear
-    line_color <- "#1f77b4"
+    line_color <- "#1f77b4"  # Blue
   } else if (best_model_type == "Quadratic") {
     m_best <- m_quad
-    line_color <- "#ff7f0e"
+    line_color <- "#ff7f0e"  # Orange
   } else {
     m_best <- m_cubic
-    line_color <- "#d62728"
+    line_color <- "#d62728"  # Red
   }
   
+  # Create predictions across age range
   x_min <- min(plot_data$Age)
   x_max <- max(plot_data$Age)
   x_range <- seq(x_min, x_max, length.out = 200)
@@ -284,14 +375,15 @@ create_corr_plot <- function(df, y_col, y_label, best_model_type, best_r2, best_
     pred_fit <- predict(m_best, newdata = pred_df, se.fit = TRUE)
   } else {
     Age_centered_range <- x_range - mean(plot_data$Age)
-    pred_df <- data.frame(Age_centered = Age_centered_range, 
-                          Age2 = Age_centered_range^2, 
+    pred_df <- data.frame(Age_centered = Age_centered_range,
+                          Age2 = Age_centered_range^2,
                           Age3 = Age_centered_range^3)
     pred_fit <- predict(m_best, newdata = pred_df, se.fit = TRUE)
   }
   
   fit_data <- data.frame(x = x_range, y = pred_fit$fit, se = pred_fit$se.fit)
   
+  # Create plot
   p <- ggplot(plot_data, aes(x = Age, y = .data[[y_col]])) +
     geom_point(alpha = 0.4, size = 2, color = "gray40") +
     geom_line(data = fit_data, aes(x = x, y = y),
@@ -305,9 +397,12 @@ create_corr_plot <- function(df, y_col, y_label, best_model_type, best_r2, best_
     p <- p + scale_y_continuous(name = y_label)
   }
   
+  # Format p-value
   p_text <- format_pvalue_scientific(best_p)
-  subtitle_text <- bquote(italic(R)^2 ~ "=" ~ .(sprintf("%.3f", best_r2)) ~ 
-                            ", " ~ italic(p) ~ "=" ~ .(p_text))
+  
+  subtitle_text <- bquote(italic(R)^2 ~ "=" ~ .(sprintf("%.3f", best_r2)) ~
+                            ", " ~ italic(p) ~ "=" ~ .(p_text) ~
+                            " (" ~ .(best_model_type) ~ ")")
   
   p <- p +
     scale_x_continuous(name = "Age (years)") +
@@ -327,6 +422,7 @@ create_corr_plot <- function(df, y_col, y_label, best_model_type, best_r2, best_
   return(p)
 }
 
+# Create datasets
 data_all <- data %>%
   filter(!is.na(WS), !is.na(PS)) %>%
   filter(is.finite(WS), is.finite(PS))
@@ -335,51 +431,97 @@ data_eclipse <- data_all %>%
   filter(Device == "Eclipse") %>%
   filter(!is.na(W1.amp), is.finite(W1.amp))
 
-p_a <- create_corr_plot(data_all, "PTA4", "PTA4 (dB HL)", 
-                        best_fit_models$PTA4$model, best_fit_models$PTA4$r2, 
+cat(paste0("Sample sizes: All = ", nrow(data_all), ", Eclipse = ", nrow(data_eclipse), "\n\n"))
+
+# Create panels using LRT-selected models FROM TABLE
+cat("Creating panels (using LRT-selected models from Table S5)...\n")
+
+p_a <- create_corr_plot(data_all, "PTA4", "PTA4 (dB HL)",
+                        best_fit_models$PTA4$model, best_fit_models$PTA4$r2,
                         best_fit_models$PTA4$p, reverse_y = TRUE)
 
-p_b <- create_corr_plot(data_all, "PTAHF", "PTAHF (dB HL)", 
-                        best_fit_models$PTAHF$model, best_fit_models$PTAHF$r2, 
+p_b <- create_corr_plot(data_all, "PTAHF", "PTAHF (dB HL)",
+                        best_fit_models$PTAHF$model, best_fit_models$PTAHF$r2,
                         best_fit_models$PTAHF$p, reverse_y = TRUE)
 
-p_c <- create_corr_plot(data_all, "Oae_5273", "OAE SNR (dB)", 
-                        best_fit_models$Oae_5273$model, best_fit_models$Oae_5273$r2, 
+p_c <- create_corr_plot(data_all, "Oae_5273", "OAE SNR (dB)",
+                        best_fit_models$Oae_5273$model, best_fit_models$Oae_5273$r2,
                         best_fit_models$Oae_5273$p, reverse_y = FALSE)
 
-p_d <- create_corr_plot(data_all, "WS", "Word Score (%)", 
-                        best_fit_models$WS$model, best_fit_models$WS$r2, 
+p_d <- create_corr_plot(data_all, "WS", "Word Score (%)",
+                        best_fit_models$WS$model, best_fit_models$WS$r2,
                         best_fit_models$WS$p, reverse_y = FALSE)
 
-p_e <- create_corr_plot(data_all, "PS", "Phoneme Score (%)", 
-                        best_fit_models$PS$model, best_fit_models$PS$r2, 
+p_e <- create_corr_plot(data_all, "PS", "Phoneme Score (%)",
+                        best_fit_models$PS$model, best_fit_models$PS$r2,
                         best_fit_models$PS$p, reverse_y = FALSE)
 
-p_f <- create_corr_plot(data_eclipse, "W1.amp", "Wave I Amplitude", 
-                        best_fit_models$W1.amp$model, best_fit_models$W1.amp$r2, 
+p_f <- create_corr_plot(data_eclipse, "W1.amp", "Wave I Amplitude",
+                        best_fit_models$W1.amp$model, best_fit_models$W1.amp$r2,
                         best_fit_models$W1.amp$p, reverse_y = FALSE)
 
-p_g <- create_corr_plot(data_all, "W1.Plat", "Wave I Latency (ms)", 
-                        best_fit_models$W1.Plat$model, best_fit_models$W1.Plat$r2, 
+p_g <- create_corr_plot(data_all, "W1.Plat", "Wave I Latency (ms)",
+                        best_fit_models$W1.Plat$model, best_fit_models$W1.Plat$r2,
                         best_fit_models$W1.Plat$p, reverse_y = FALSE)
 
-p_h <- create_corr_plot(data_all, "W3.Plat", "Wave III Latency (ms)", 
-                        best_fit_models$W3.Plat$model, best_fit_models$W3.Plat$r2, 
+p_h <- create_corr_plot(data_all, "W3.Plat", "Wave III Latency (ms)",
+                        best_fit_models$W3.Plat$model, best_fit_models$W3.Plat$r2,
                         best_fit_models$W3.Plat$p, reverse_y = FALSE)
 
-p_i <- create_corr_plot(data_all, "W5.Plat", "Wave V Latency (ms)", 
-                        best_fit_models$W5.Plat$model, best_fit_models$W5.Plat$r2, 
+p_i <- create_corr_plot(data_all, "W5.Plat", "Wave V Latency (ms)",
+                        best_fit_models$W5.Plat$model, best_fit_models$W5.Plat$r2,
                         best_fit_models$W5.Plat$p, reverse_y = FALSE)
 
+cat("✓ All panels created\n\n")
+
+# Combine into 3×3 matrix
 fig_combined <- (p_a | p_b | p_c) /
   (p_d | p_e | p_f) /
   (p_g | p_h | p_i)
 
-ggsave("output/figures/Figure3_Age_vs_Auditory_3x3.pdf",
+# Save
+ggsave("output/figures/Figure3_Age_vs_Auditory_3x3_LRT.pdf",
        fig_combined, width = 14, height = 13, dpi = 300)
 
-ggsave("output/figures/Figure3_Age_vs_Auditory_3x3.png",
+cat("✓ Saved: output/figures/Figure3_Age_vs_Auditory_3x3_LRT.pdf\n")
+
+ggsave("output/figures/Figure3_Age_vs_Auditory_3x3_LRT.png",
        fig_combined, width = 14, height = 13, dpi = 300)
+
+cat("✓ Saved: output/figures/Figure3_Age_vs_Auditory_3x3_LRT.png\n\n")
+
+# ==============================================================================
+# FINAL SUMMARY
+# ==============================================================================
+
+cat("════════════════════════════════════════════════════════════════════════\n")
+cat("✓ ANALYSIS COMPLETE!\n")
+cat("════════════════════════════════════════════════════════════════════════\n\n")
+
+cat("WORKFLOW:\n")
+cat(" 1. ✓ Hierarchical LRT-based model selection applied\n")
+cat(" 2. ✓ Table S5 generated with LRT decisions and p-values\n")
+cat(" 3. ✓ Best-fit models saved to best_fit_models.rds\n")
+cat(" 4. ✓ Figure 3 plotted using LRT-selected polynomial orders\n")
+cat(" 5. ✓ Result: Table-figure alignment with biological hierarchy!\n\n")
+
+cat("LRT SELECTION LOGIC (α = 0.05):\n")
+cat(" • Linear baseline\n")
+cat(" • If p_quadratic < 0.05: test quadratic vs cubic\n")
+cat("   - If p_cubic < 0.05: select cubic\n")
+cat("   - Else: select quadratic\n")
+cat(" • Else: stick with linear\n\n")
+
+cat("OUTPUTS GENERATED:\n")
+cat(" 📊 Tables (output/):\n")
+cat(" • SuppTable5_Age_effects.csv (with LRT p-values)\n")
+cat(" • SuppTable6_Age_x_Sex_effects.csv\n")
+cat(" • best_fit_models.rds (intermediate)\n")
+cat(" 📈 Figures (output/figures/):\n")
+cat(" • Figure3_Age_vs_Auditory_3x3_LRT.pdf\n")
+cat(" • Figure3_Age_vs_Auditory_3x3_LRT.png\n\n")
+
+cat("════════════════════════════════════════════════════════════════════════\n")
 
 # ==============================================================================
 # END
