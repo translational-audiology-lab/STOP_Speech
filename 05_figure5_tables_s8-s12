@@ -1,9 +1,6 @@
 # ==============================================================================
 # FIGURE 5 GENERATION - REVISED (No panel labels, updated annotations)
 # ==============================================================================
-# Insert this code section into your 05_figure5_lrt.r script
-# Replace the PART 5 section (starting at "# PANEL A: Aging Trajectories")
-# ==============================================================================
 
 cat("════════════════════════════════════════════════════════════════════════\n")
 cat("GENERATING FIGURE 5: 4-PANEL PUBLICATION FIGURE (REVISED)\n")
