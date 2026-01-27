@@ -1,9 +1,6 @@
 # ==============================================================================
 # STOP Speech-ABR Analysis: DEMOGRAPHICS TABLES + FIGURE 2
 # ==============================================================================
-# Extended HF hearing loss and synaptopathy predict speech perception in aging
-# Nature Aging
-# ==============================================================================
 
 suppressPackageStartupMessages({
   library(tidyverse)
