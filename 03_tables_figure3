@@ -1,14 +1,6 @@
 # ==============================================================================
 # STOP Speech-ABR Analysis: FIGURE 3 + TABLES S5-S6 (LRT-BASED SELECTION)
 # ==============================================================================
-# Extended HF hearing loss and synaptopathy predict speech perception in aging
-# Nature Aging
-# 
-# CHANGE LOG:
-# - Replaced AIC model selection with Hierarchical Likelihood Ratio Tests (LRT)
-# - Sequential testing: Linear → Quadratic (p < 0.05?) → Cubic (p < 0.05?)
-# - Best practice per user specification
-# ==============================================================================
 
 suppressPackageStartupMessages({
   library(tidyverse)
