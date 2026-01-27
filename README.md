@@ -28,14 +28,14 @@ The analysis proceeds in four main phases:
 
 2. **Descriptive audiometry and age-related trajectories (Figures 2–3, Supplementary Tables S1–S6)**
    - Generate age-, sex-, and eHF-stratified audiometric/OAE/ABR summaries (Supplementary Tables S1–S4).
-   - Fit AIC-based polynomial models (linear, quadratic, cubic) of **Age → audiometric, OAE, speech, and ABR variables** to quantify age trajectories and identify optimal polynomial fits (Supplementary Table S5).
+   - Fit polynomial models (linear, quadratic, cubic) of **Age → audiometric, OAE, speech, and ABR variables** using **likelihood ratio testing (LRT)** with Bonferroni correction to identify optimal polynomial fits (Supplementary Table S5).
    - Extend to **Age × Sex** interaction models for speech outcomes to test for gender-dependent aging (Supplementary Table S6).
    - Use best-fitting polynomial models to plot age trajectories across all auditory variables (Figure 3).
    - **Key finding:** eHF thresholds decline linearly with age (R²=0.641), explaining 64% of age-related variance—far exceeding conventional audiometry (R²=0.158).
 
 3. **Univariate associations with speech perception (Figure 4, Supplementary Table S7)**
-   - Compute AIC-based polynomial regressions of **WS and PS** on each auditory predictor individually (PTA4, PTAHF, OAE, ABR latencies and amplitude).
-   - Identify optimal polynomial fits via likelihood ratio testing with Bonferroni correction.
+   - Compute polynomial regressions of **WS and PS** on each auditory predictor individually (PTA4, PTAHF, OAE, ABR latencies and amplitude).
+   - Identify optimal polynomial fits via **likelihood ratio testing (LRT)** with Bonferroni correction.
    - Visualize univariate relationships and quantify R² for each predictor (Supplementary Table S7).
    - **Key findings:** 
      - eHF (R²=0.34–0.36) outperforms conventional PTA (R²=0.22–0.25) by 12+ percentage points
@@ -43,11 +43,12 @@ The analysis proceeds in four main phases:
      - W1.Amplitude shows minimal association (R²=0.05–0.13)
 
 4. **Multivariable speech models and interaction analyses (Figure 5, Supplementary Tables S8–S12)**
-   - Fit stepwise multivariable models predicting WS and PS:
+   - Fit stepwise multivariable models predicting WS and PS using **likelihood ratio testing (LRT)** to compare nested models:
      - **Phase 0:** Age + Age² + Sex (baseline demographics)
      - **Phase 1:** Add hearing loss terms (PTA4, PTA4², PTAHF, PTAHF², PTAHF³, OAE, OAE², OAE³)
      - **Phase 2:** Add polynomial ABR terms (W1.Amplitude, W3.Latency³, W5.Latency)
      - **Phase 3 (FINAL):** Full model including Age × W1.Latency and Age × W1.Amplitude interactions
+   
    - Final Phase 3 model includes **19 predictors** controlling for:
      - Demographics: Age, Age², Sex
      - Conventional + extended audiometry: PTA4, PTA4², PTAHF, PTAHF², PTAHF³
@@ -57,11 +58,11 @@ The analysis proceeds in four main phases:
      - Central auditory processing: W3.Latency, W3.Latency², W3.Latency³, W5.Latency
 
    - **Model performance (Phase 3):**
-     - WS: R²=0.363, AIC=2017.9
-     - PS: R²=0.418, AIC=1683.9
+     - WS: R²=0.363
+     - PS: R²=0.418
 
    - Summarize final model coefficients with HC3 robust standard errors and 95% CIs (Supplementary Table S8).
-   - Quantify incremental contribution of hearing loss, neural measures, and interactions via R² change, AIC, and likelihood ratio tests (Supplementary Table S9).
+   - Quantify incremental contribution of hearing loss, neural measures, and interactions via R² change and **likelihood ratio tests (LRT)** across phases (Supplementary Table S9).
    - Extract key predictors for forest-plot visualization ordered by mechanistic hierarchy (Figure 5b, Supplementary Table S10):
      * W3.Latency³ (central processing)
      * Age × W1.Latency (age-amplified peripheral timing)
@@ -79,4 +80,3 @@ The analysis proceeds in four main phases:
      * Young adults (median age 38): tight upper-right cluster (WS=78, PS=91), slope=0.83
      * Older adults (median age 53): greater scatter, lower-left region (WS=74, PS=88), slope=0.68
      * **Selective word score vulnerability with age despite high overall correlation (r=0.934)**
-
