@@ -1,6 +1,6 @@
 # STOP_Speech
 
-# Extended High-Frequency Hearing Loss, Neural Conduction Velocity, and Speech-in-Noise
+# Extended High-Frequency Hearing Loss, Cochlear Synaptopathy, and Speech-in-Noise
 
 This repository contains the R code used to analyse data from the STOP study on the relationship between extended high-frequency (eHF) hearing loss, peripheral nerve conduction velocity (ABR Wave I latency), cochlear neural synchrony (ABR Wave I amplitude), and speech-in-noise perception (word and phoneme scores).
 
