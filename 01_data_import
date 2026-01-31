@@ -147,7 +147,3 @@ cat("\n✓ Cleaned data saved to: output/data_clean.rds\n")
 write.csv(data, "output/data_clean_standard.csv", row.names = FALSE)
 cat("✓ Cleaned data saved to: output/data_clean_standard.csv\n")
 
-cat("\n========================================\n")
-cat("✓ Data import and diagnostics complete!\n")
-cat("Next: Run 02_demographic_tables.R\n")
-cat("========================================\n")
