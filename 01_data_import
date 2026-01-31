@@ -1,11 +1,6 @@
 # ==============================================================================
 # STOP Speech-ABR Analysis: Data Import & Diagnostics
 # ==============================================================================
-# Project: Extended HF Hearing Loss vs Synaptopathy predicting Speech
-# Target: Nature Aging
-# Author: Christopher R. Cederroth
-# Date: January 2026
-# ==============================================================================
 
 # Load required libraries
 library(tidyverse)
