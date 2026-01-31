@@ -1,16 +1,6 @@
 # ==============================================================================
 # STOP Speech-ABR Analysis: Package Installation
 # ==============================================================================
-# Project: Extended HF Hearing Loss vs Synaptopathy predicting Speech
-# Target: Nature Aging
-# Author: Christopher R. Cederroth
-# Date: January 2026
-# ==============================================================================
-
-cat("========================================\n")
-cat("Installing Required R Packages\n")
-cat("This may take 5-10 minutes on first run\n")
-cat("========================================\n\n")
 
 # List of required packages
 packages <- c(
