@@ -2,6 +2,16 @@
 # FIGURE 5 GENERATION - REVISED (No panel labels, updated annotations)
 # ==============================================================================
 
+suppressPackageStartupMessages({
+  library(tibble)
+  library(dplyr)
+  library(ggplot2)
+})
+
+# Insert this code section into your 05_figure5_lrt.r script
+# Replace the PART 5 section (starting at "# PANEL A: Aging Trajectories")
+# ==============================================================================
+
 cat("════════════════════════════════════════════════════════════════════════\n")
 cat("GENERATING FIGURE 5: 4-PANEL PUBLICATION FIGURE (REVISED)\n")
 cat("════════════════════════════════════════════════════════════════════════\n\n")
@@ -23,83 +33,125 @@ age_seq <- seq(min(data_analysis$Age), max(data_analysis$Age), length.out = 100)
 age_c_seq <- age_seq - mean(data_analysis$Age)
 
 pred_data <- tibble(
-  Age_c = age_c_seq, Age_c2 = age_c_seq^2,
-  Sex = factor("Woman", levels = levels(data_analysis$Sex)),
-  PTA4_c = 0, PTA4_c2 = 0,
-  PTAHF_c = 0, PTAHF_c2 = 0, PTAHF_c3 = 0,
-  OAE_c = 0, OAE_c2 = 0, OAE_c3 = 0,
-  W1Lat_c = 0, Age_x_W1Lat = 0,
-  W1Amp_c = 0, Age_x_W1Amp = 0,
-  W3Lat_c = 0, W3Lat_c2 = 0, W3Lat_c3 = 0,
-  W5Lat_c = 0
+  Age_c    = age_c_seq,
+  Age_c2   = age_c_seq^2,
+  Sex      = factor("Woman", levels = levels(data_analysis$Sex)),
+  PTA4_c   = 0, PTA4_c2 = 0,
+  PTAHF_c  = 0, PTAHF_c2 = 0, PTAHF_c3 = 0,
+  OAE_c    = 0, OAE_c2 = 0, OAE_c3 = 0,
+  W1Lat_c  = 0, Age_x_W1Lat = 0,
+  W1Amp_c  = 0, Age_x_W1Amp = 0,
+  W3Lat_c  = 0, W3Lat_c2 = 0, W3Lat_c3 = 0,
+  W5Lat_c  = 0
 )
 
 pred_ws_fit <- predict(m_ws, newdata = pred_data, se.fit = TRUE)
 pred_ps_fit <- predict(m_ps, newdata = pred_data, se.fit = TRUE)
 
-pred_combined <- bind_rows(
-  tibble(Age = age_seq, Score = "Word Score",
-         Fitted = pred_ws_fit$fit, SE = pred_ws_fit$se.fit,
-         CI_Lower = pred_ws_fit$fit - 1.96 * pred_ws_fit$se.fit,
-         CI_Upper = pred_ws_fit$fit + 1.96 * pred_ws_fit$se.fit),
-  tibble(Age = age_seq, Score = "Phoneme Score",
-         Fitted = pred_ps_fit$fit, SE = pred_ps_fit$se.fit,
-         CI_Lower = pred_ps_fit$fit - 1.96 * pred_ps_fit$se.fit,
-         CI_Upper = pred_ps_fit$fit + 1.96 * pred_ps_fit$se.fit)
+pred_combined <- dplyr::bind_rows(
+  tibble(
+    Age      = age_seq,
+    Score    = "Word Score",
+    Fitted   = pred_ws_fit$fit,
+    SE       = pred_ws_fit$se.fit,
+    CI_Lower = pred_ws_fit$fit - 1.96 * pred_ws_fit$se.fit,
+    CI_Upper = pred_ws_fit$fit + 1.96 * pred_ws_fit$se.fit
+  ),
+  tibble(
+    Age      = age_seq,
+    Score    = "Phoneme Score",
+    Fitted   = pred_ps_fit$fit,
+    SE       = pred_ps_fit$se.fit,
+    CI_Lower = pred_ps_fit$fit - 1.96 * pred_ps_fit$se.fit,
+    CI_Upper = pred_ps_fit$fit + 1.96 * pred_ps_fit$se.fit
+  )
 )
 
 panel_a <- ggplot(data_analysis, aes(x = Age)) +
   geom_point(aes(y = WS, color = "Word Score"), alpha = 0.4, size = 1) +
   geom_point(aes(y = PS, color = "Phoneme Score"), alpha = 0.4, size = 1) +
-  geom_ribbon(data = filter(pred_combined, Score == "Word Score"),
-              aes(ymin = CI_Lower, ymax = CI_Upper, fill = "Word Score"), alpha = 0.12) +
-  geom_ribbon(data = filter(pred_combined, Score == "Phoneme Score"),
-              aes(ymin = CI_Lower, ymax = CI_Upper, fill = "Phoneme Score"), alpha = 0.12) +
-  geom_line(data = filter(pred_combined, Score == "Word Score"),
-            aes(y = Fitted, color = "Word Score"), linewidth = 1) +
-  geom_line(data = filter(pred_combined, Score == "Phoneme Score"),
-            aes(y = Fitted, color = "Phoneme Score"), linewidth = 1) +
-  annotate("text", x = min(data_analysis$Age) + 2, y = max(data_analysis$PS) - 2,
-           label = r2_text_combined, hjust = 0, vjust = 1, size = 8/.pt, family = "sans") +
-  scale_color_manual(values = c("Word Score" = "#E74C3C", "Phoneme Score" = "#3498DB")) +
-  scale_fill_manual(values = c("Word Score" = "#E74C3C", "Phoneme Score" = "#3498DB")) +
+  geom_ribbon(
+    data = dplyr::filter(pred_combined, Score == "Word Score"),
+    aes(ymin = CI_Lower, ymax = CI_Upper, fill = "Word Score"),
+    alpha = 0.12
+  ) +
+  geom_ribbon(
+    data = dplyr::filter(pred_combined, Score == "Phoneme Score"),
+    aes(ymin = CI_Lower, ymax = CI_Upper, fill = "Phoneme Score"),
+    alpha = 0.12
+  ) +
+  geom_line(
+    data = dplyr::filter(pred_combined, Score == "Word Score"),
+    aes(y = Fitted, color = "Word Score"),
+    linewidth = 1
+  ) +
+  geom_line(
+    data = dplyr::filter(pred_combined, Score == "Phoneme Score"),
+    aes(y = Fitted, color = "Phoneme Score"),
+    linewidth = 1
+  ) +
+  annotate(
+    "text",
+    x = min(data_analysis$Age) + 2,
+    y = max(data_analysis$PS) - 2,
+    label = r2_text_combined,
+    hjust = 0, vjust = 1,
+    size = 8/.pt,
+    family = "sans"
+  ) +
+  scale_color_manual(
+    values = c("Word Score" = "#E74C3C", "Phoneme Score" = "#3498DB")
+  ) +
+  scale_fill_manual(
+    values = c("Word Score" = "#E74C3C", "Phoneme Score" = "#3498DB")
+  ) +
   labs(x = "Age (years)", y = "Score (%)") +
   theme_minimal() +
-  theme(legend.position = "none", 
-        panel.grid.minor = element_blank(),
-        axis.title = element_text(size = 10),
-        axis.text = element_text(size = 8),
-        aspect.ratio = 1)
+  theme(
+    legend.position = "none",
+    panel.grid.minor = element_blank(),
+    axis.title = element_text(size = 10),
+    axis.text  = element_text(size = 8),
+    aspect.ratio = 1
+  )
 
 # ============================================================================
 # PANEL B: Forest Plot (NO LEGEND)
 # ============================================================================
 
-forest_long <- bind_rows(
+forest_long <- dplyr::bind_rows(
   forest_data %>%
-    select(Predictor, est = WS_est, ci_lower = WS_ci_lower, ci_upper = WS_ci_upper) %>%
-    mutate(Outcome = "Word Score"),
+    dplyr::select(Predictor, est = WS_est, ci_lower = WS_ci_lower, ci_upper = WS_ci_upper) %>%
+    dplyr::mutate(Outcome = "Word Score"),
   forest_data %>%
-    select(Predictor, est = PS_est, ci_lower = PS_ci_lower, ci_upper = PS_ci_upper) %>%
-    mutate(Outcome = "Phoneme Score")
+    dplyr::select(Predictor, est = PS_est, ci_lower = PS_ci_lower, ci_upper = PS_ci_upper) %>%
+    dplyr::mutate(Outcome = "Phoneme Score")
 ) %>%
-  mutate(Predictor = factor(Predictor, levels = forest_data$Predictor))
+  dplyr::mutate(Predictor = factor(Predictor, levels = forest_data$Predictor))
 
 panel_b <- ggplot(forest_long, aes(x = est, y = Predictor, color = Outcome)) +
   geom_vline(xintercept = 0, linetype = "dashed", color = "gray50", linewidth = 0.5) +
   geom_point(position = position_dodge(width = 0.5), size = 1.5, alpha = 0.8) +
-  geom_linerange(aes(xmin = ci_lower, xmax = ci_upper),
-                 position = position_dodge(width = 0.5), linewidth = 0.8, alpha = 0.7) +
-  scale_color_manual(values = c("Word Score" = "#E74C3C", "Phoneme Score" = "#3498DB"),
-                     name = NULL) +
+  geom_linerange(
+    aes(xmin = ci_lower, xmax = ci_upper),
+    position = position_dodge(width = 0.5),
+    linewidth = 0.8,
+    alpha = 0.7
+  ) +
+  scale_color_manual(
+    values = c("Word Score" = "#E74C3C", "Phoneme Score" = "#3498DB"),
+    name = NULL
+  ) +
   labs(x = "Coefficient (95% CI)", y = NULL) +
   theme_minimal() +
-  theme(legend.position = "none",  # REMOVED LEGEND
-        panel.grid.minor = element_blank(),
-        panel.grid.major.y = element_line(color = "gray90", linewidth = 0.2),
-        axis.title = element_text(size = 10),
-        axis.text = element_text(size = 8),
-        aspect.ratio = 1)
+  theme(
+    legend.position = "none",
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_line(color = "gray90", linewidth = 0.2),
+    axis.title = element_text(size = 10),
+    axis.text  = element_text(size = 8),
+    aspect.ratio = 1
+  )
 
 # ============================================================================
 # PANEL C: Age × W1.Latency Interaction (NO LEGEND)
@@ -109,50 +161,60 @@ age_groups_fig <- c(45, 55, 65, 75)
 w1lat_seq <- seq(min(data_analysis$W1.Plat), max(data_analysis$W1.Plat), length.out = 100)
 w1lat_c_seq <- w1lat_seq - mean(data_analysis$W1.Plat)
 
-interaction_pred_fig <- expand_grid(
-  Age = age_groups_fig,
+interaction_pred_fig <- tidyr::expand_grid(
+  Age   = age_groups_fig,
   W1Lat = w1lat_seq
 ) %>%
-  mutate(
-    Age_c = Age - mean(data_analysis$Age),
-    Age_c2 = Age_c^2,
-    W1Lat_c = W1Lat - mean(data_analysis$W1.Plat),
+  dplyr::mutate(
+    Age_c       = Age - mean(data_analysis$Age),
+    Age_c2      = Age_c^2,
+    W1Lat_c     = W1Lat - mean(data_analysis$W1.Plat),
     Age_x_W1Lat = Age_c * W1Lat_c,
-    Sex = factor("Woman", levels = levels(data_analysis$Sex)),
-    PTA4_c = 0, PTA4_c2 = 0,
-    PTAHF_c = 0, PTAHF_c2 = 0, PTAHF_c3 = 0,
-    OAE_c = 0, OAE_c2 = 0, OAE_c3 = 0,
-    W1Amp_c = 0, Age_x_W1Amp = 0,
-    W3Lat_c = 0, W3Lat_c2 = 0, W3Lat_c3 = 0,
-    W5Lat_c = 0
+    Sex         = factor("Woman", levels = levels(data_analysis$Sex)),
+    PTA4_c      = 0, PTA4_c2 = 0,
+    PTAHF_c     = 0, PTAHF_c2 = 0, PTAHF_c3 = 0,
+    OAE_c       = 0, OAE_c2 = 0, OAE_c3 = 0,
+    W1Amp_c     = 0, Age_x_W1Amp = 0,
+    W3Lat_c     = 0, W3Lat_c2 = 0, W3Lat_c3 = 0,
+    W5Lat_c     = 0
   )
 
 interaction_pred_fig$Pred_WS <- predict(m_ws, newdata = interaction_pred_fig)
 interaction_pred_fig$Pred_PS <- predict(m_ps, newdata = interaction_pred_fig)
 
-int_plot_combined <- bind_rows(
-  interaction_pred_fig %>% select(W1Lat, Age, Pred_WS) %>%
-    rename(Predicted = Pred_WS) %>% mutate(Outcome = "WS"),
-  interaction_pred_fig %>% select(W1Lat, Age, Pred_PS) %>%
-    rename(Predicted = Pred_PS) %>% mutate(Outcome = "PS")
+int_plot_combined <- dplyr::bind_rows(
+  interaction_pred_fig %>%
+    dplyr::select(W1Lat, Age, Pred_WS) %>%
+    dplyr::rename(Predicted = Pred_WS) %>%
+    dplyr::mutate(Outcome = "WS"),
+  interaction_pred_fig %>%
+    dplyr::select(W1Lat, Age, Pred_PS) %>%
+    dplyr::rename(Predicted = Pred_PS) %>%
+    dplyr::mutate(Outcome = "PS")
 ) %>%
-  mutate(Age_label = paste0(Age, "y"))
+  dplyr::mutate(Age_label = paste0(Age, "y"))
 
-panel_c <- ggplot(int_plot_combined, aes(x = W1Lat, y = Predicted, 
+panel_c <- ggplot(int_plot_combined, aes(x = W1Lat, y = Predicted,
                                          color = Age_label, linetype = Outcome)) +
   geom_line(linewidth = 0.9, alpha = 0.8) +
-  scale_color_manual(name = "Age",
-                     values = c("45y" = "#2ECC71", "55y" = "#F39C12",
-                                "65y" = "#E67E22", "75y" = "#E74C3C")) +
-  scale_linetype_manual(name = "Outcome",
-                        values = c("WS" = "solid", "PS" = "dashed")) +
+  scale_color_manual(
+    name   = "Age",
+    values = c("45y" = "#2ECC71", "55y" = "#F39C12",
+               "65y" = "#E67E22", "75y" = "#E74C3C")
+  ) +
+  scale_linetype_manual(
+    name   = "Outcome",
+    values = c("WS" = "solid", "PS" = "dashed")
+  ) +
   labs(x = "W1.Latency (ms)", y = "Predicted Score (%)") +
   theme_minimal() +
-  theme(legend.position = "none",  # REMOVED LEGEND
-        panel.grid.minor = element_blank(),
-        axis.title = element_text(size = 10),
-        axis.text = element_text(size = 8),
-        aspect.ratio = 1)
+  theme(
+    legend.position = "none",
+    panel.grid.minor = element_blank(),
+    axis.title = element_text(size = 10),
+    axis.text  = element_text(size = 8),
+    aspect.ratio = 1
+  )
 
 # ============================================================================
 # PANEL D: WS vs PS with Age Gradient (Keep legend on right)
@@ -160,30 +222,36 @@ panel_c <- ggplot(int_plot_combined, aes(x = W1Lat, y = Predicted,
 
 panel_d <- ggplot(data_analysis, aes(x = WS, y = PS, color = Age)) +
   geom_point(alpha = 0.5, size = 1.2) +
-  geom_smooth(method = "lm", se = TRUE, color = "gray30", 
-              fill = "gray80", alpha = 0.2, linewidth = 0.8) +
+  geom_smooth(
+    method = "lm", se = TRUE,
+    color  = "gray30",
+    fill   = "gray80",
+    alpha  = 0.2,
+    linewidth = 0.8
+  ) +
   scale_color_viridis_c(name = "Age (years)", option = "plasma") +
   labs(x = "Word Score (%)", y = "Phoneme Score (%)") +
   theme_minimal() +
-  theme(legend.position = "right",
-        panel.grid.minor = element_blank(),
-        axis.title = element_text(size = 10),
-        axis.text = element_text(size = 8),
-        legend.text = element_text(size = 8),
-        legend.title = element_text(size = 9),
-        aspect.ratio = 1)
+  theme(
+    legend.position = "right",
+    panel.grid.minor = element_blank(),
+    axis.title = element_text(size = 10),
+    axis.text  = element_text(size = 8),
+    legend.text  = element_text(size = 8),
+    legend.title = element_text(size = 9),
+    aspect.ratio = 1
+  )
 
 # ============================================================================
 # COMBINE 2×2 LAYOUT (NO PANEL LABELS)
 # ============================================================================
 
 combined_figure <- (panel_a + panel_b) / (panel_c + panel_d) +
-  plot_layout(ncol = 2, nrow = 2)
+  patchwork::plot_layout(ncol = 2, nrow = 2)
 
 # Save Figure 5
-ggsave("output/figures/Figure5_Differential_Neural_Mechanisms_LRT.png", 
+ggsave("output/figures/Figure5_Differential_Neural_Mechanisms_LRT.png",
        combined_figure, width = 10, height = 10, dpi = 300, device = "png")
-
 ggsave("output/figures/Figure5_Differential_Neural_Mechanisms_LRT.pdf",
        combined_figure, width = 10, height = 10, dpi = 300, device = "pdf")
 
@@ -192,4 +260,263 @@ cat("✓ Saved: output/figures/Figure5_Differential_Neural_Mechanisms_LRT.pdf\n\
 
 # ==============================================================================
 # END OF FIGURE 5 GENERATION
+# ==============================================================================
+
+# ==============================================================================
+# PART 4: GENERATE SUPPLEMENTARY TABLES
+# ==============================================================================
+
+cat("════════════════════════════════════════════════════════════════════════\n")
+cat("GENERATING SUPPLEMENTARY TABLES S8-S12\n")
+cat("════════════════════════════════════════════════════════════════════════\n\n")
+
+# -----------------------------------------------------------------------------
+# TABLE S8: FINAL MODEL COEFFICIENTS (with robust SE)
+# -----------------------------------------------------------------------------
+
+cat("Creating Table S8: Final Model Coefficients...\n")
+
+vcov_hc3_ws <- sandwich::vcovHC(m_ws, type = "HC3")
+vcov_hc3_ps <- sandwich::vcovHC(m_ps, type = "HC3")
+
+se_hc3_ws <- sqrt(diag(vcov_hc3_ws))
+se_hc3_ps <- sqrt(diag(vcov_hc3_ps))
+
+coef_ws <- coef(m_ws)
+coef_ps <- coef(m_ps)
+
+t_ws <- coef_ws / se_hc3_ws
+t_ps <- coef_ps / se_hc3_ps
+
+p_ws <- 2 * (1 - pt(abs(t_ws), df = nrow(data_analysis) - length(coef_ws)))
+p_ps <- 2 * (1 - pt(abs(t_ps), df = nrow(data_analysis) - length(coef_ps)))
+
+table_s8 <- tibble(
+  Variable    = names(coef_ws),
+  WS_Estimate = round(coef_ws, 4),
+  WS_SE       = round(se_hc3_ws, 4),
+  WS_CI_Lower = round(coef_ws - 1.96 * se_hc3_ws, 4),
+  WS_CI_Upper = round(coef_ws + 1.96 * se_hc3_ws, 4),
+  WS_t        = round(t_ws, 4),
+  WS_pvalue   = signif(p_ws, 3),
+  PS_Estimate = round(coef_ps, 4),
+  PS_SE       = round(se_hc3_ps, 4),
+  PS_CI_Lower = round(coef_ps - 1.96 * se_hc3_ps, 4),
+  PS_CI_Upper = round(coef_ps + 1.96 * se_hc3_ps, 4),
+  PS_t        = round(t_ps, 4),
+  PS_pvalue   = signif(p_ps, 3)
+)
+
+write.csv(table_s8, "output/SuppTable8_Final_Model_Coefficients.csv",
+          row.names = FALSE, fileEncoding = "UTF-8", na = "")
+
+cat("✓ Saved: output/SuppTable8_Final_Model_Coefficients.csv\n\n")
+
+# -----------------------------------------------------------------------------
+# TABLE S9: MODEL PROGRESSION (Phase 0 → 1 → 2 → 3 with LRTs)
+# -----------------------------------------------------------------------------
+
+cat("Creating Table S9: Model Progression (Hierarchical LRTs)...\n")
+
+table_s9 <- tibble(
+  Model_Phase = c(
+    "Phase 0 (Age + Sex)",
+    "Phase 1 (+ Hearing Loss)",
+    "Phase 2 (+ ABR)",
+    "Phase 3 (+ Interactions)",
+    "Phase 0 (Age + Sex)",
+    "Phase 1 (+ Hearing Loss)",
+    "Phase 2 (+ ABR)",
+    "Phase 3 (+ Interactions)"
+  ),
+  Outcome = c(rep("Word Score", 4), rep("Phoneme Score", 4)),
+  n_predictors = c(3, 9, 15, 17, 3, 9, 15, 17),
+  R2 = round(c(
+    summary(m0_ws)$r.squared, summary(m1_ws)$r.squared,
+    summary(m2_ws)$r.squared, summary(m3_ws)$r.squared,
+    summary(m0_ps)$r.squared, summary(m1_ps)$r.squared,
+    summary(m2_ps)$r.squared, summary(m3_ps)$r.squared
+  ), 4),
+  Adj_R2 = round(c(
+    summary(m0_ws)$adj.r.squared, summary(m1_ws)$adj.r.squared,
+    summary(m2_ws)$adj.r.squared, summary(m3_ws)$adj.r.squared,
+    summary(m0_ps)$adj.r.squared, summary(m1_ps)$adj.r.squared,
+    summary(m2_ps)$adj.r.squared, summary(m3_ps)$adj.r.squared
+  ), 4),
+  Delta_R2 = round(c(
+    NA,
+    summary(m1_ws)$r.squared - summary(m0_ws)$r.squared,
+    summary(m2_ws)$r.squared - summary(m1_ws)$r.squared,
+    summary(m3_ws)$r.squared - summary(m2_ws)$r.squared,
+    NA,
+    summary(m1_ps)$r.squared - summary(m0_ps)$r.squared,
+    summary(m2_ps)$r.squared - summary(m1_ps)$r.squared,
+    summary(m3_ps)$r.squared - summary(m2_ps)$r.squared
+  ), 4),
+  AIC = round(c(
+    AIC(m0_ws), AIC(m1_ws), AIC(m2_ws), AIC(m3_ws),
+    AIC(m0_ps), AIC(m1_ps), AIC(m2_ps), AIC(m3_ps)
+  ), 1),
+  LRT_p = c(
+    NA_real_,
+    lrt_01_ws$`Pr(>F)`[2],
+    lrt_12_ws$`Pr(>F)`[2],
+    lrt_23_ws$`Pr(>F)`[2],
+    NA_real_,
+    lrt_01_ps$`Pr(>F)`[2],
+    lrt_12_ps$`Pr(>F)`[2],
+    lrt_23_ps$`Pr(>F)`[2]
+  )
+)
+
+table_s9 <- table_s9 %>%
+  mutate(LRT_p = signif(LRT_p, 3))
+
+write.csv(table_s9, "output/SuppTable9_Model_Progression_Hearing_Loss.csv",
+          row.names = FALSE, fileEncoding = "UTF-8", na = "")
+
+cat("✓ Saved: output/SuppTable9_Model_Progression_Hearing_Loss.csv\n\n")
+
+# -----------------------------------------------------------------------------
+# TABLE S10: FOREST PLOT DATA (key predictors)
+# -----------------------------------------------------------------------------
+
+cat("Creating Table S10: Forest Plot Data...\n")
+
+key_predictors <- c("W3Lat_c3", "Age_x_W1Lat", "W1Lat_c",
+                    "Age_x_W1Amp", "W1Amp_c", "Age_c2")
+
+forest_data <- tibble(
+  Predictor   = c("W3.Latency³", "Age × W1.Latency", "W1.Latency",
+                  "Age × W1.Amplitude", "W1.Amplitude", "Age²"),
+  WS_est      = round(coef_ws[key_predictors], 4),
+  WS_se       = round(se_hc3_ws[key_predictors], 4),
+  WS_ci_lower = round(coef_ws[key_predictors] - 1.96 * se_hc3_ws[key_predictors], 4),
+  WS_ci_upper = round(coef_ws[key_predictors] + 1.96 * se_hc3_ws[key_predictors], 4),
+  WS_t        = round(t_ws[key_predictors], 4),
+  WS_p        = signif(p_ws[key_predictors], 3),
+  PS_est      = round(coef_ps[key_predictors], 4),
+  PS_se       = round(se_hc3_ps[key_predictors], 4),
+  PS_ci_lower = round(coef_ps[key_predictors] - 1.96 * se_hc3_ps[key_predictors], 4),
+  PS_ci_upper = round(coef_ps[key_predictors] + 1.96 * se_hc3_ps[key_predictors], 4),
+  PS_t        = round(t_ps[key_predictors], 4),
+  PS_p        = signif(p_ps[key_predictors], 3)
+)
+
+write.csv(forest_data, "output/SuppTable10_Forest_Plot_Data.csv",
+          row.names = FALSE, fileEncoding = "UTF-8", na = "")
+
+cat("✓ Saved: output/SuppTable10_Forest_Plot_Data.csv\n\n")
+
+# -----------------------------------------------------------------------------
+# TABLE S11: INTERACTION TRAJECTORIES (Age × W1.Latency)
+# -----------------------------------------------------------------------------
+
+cat("Creating Table S11: Age × W1.Latency Interaction Trajectories...\n")
+
+age_groups <- c(45, 55, 65, 75)
+w1lat_levels <- quantile(data_analysis$W1.Plat, probs = c(0, 0.25, 0.5, 0.75, 1))
+w1lat_labels <- c("Minimum", "Q1", "Median", "Q3", "Maximum")
+
+interaction_pred <- tidyr::expand_grid(
+  Age = age_groups,
+  W1Lat = w1lat_levels
+) %>%
+  dplyr::mutate(
+    W1Lat_label = rep(w1lat_labels, length(age_groups)),
+    Age_c       = Age - mean(data_analysis$Age),
+    Age_c2      = Age_c^2,
+    W1Lat_c     = W1Lat - mean(data_analysis$W1.Plat),
+    Age_x_W1Lat = Age_c * W1Lat_c,
+    Sex         = factor("Woman", levels = levels(data_analysis$Sex)),
+    PTA4_c      = 0, PTA4_c2 = 0,
+    PTAHF_c     = 0, PTAHF_c2 = 0, PTAHF_c3 = 0,
+    OAE_c       = 0, OAE_c2 = 0, OAE_c3 = 0,
+    W1Amp_c     = 0, Age_x_W1Amp = 0,
+    W3Lat_c     = 0, W3Lat_c2 = 0, W3Lat_c3 = 0,
+    W5Lat_c     = 0
+  )
+
+pred_ws <- predict(m_ws, newdata = interaction_pred, se.fit = TRUE)
+pred_ps <- predict(m_ps, newdata = interaction_pred, se.fit = TRUE)
+
+table_s11 <- tibble(
+  Age_Group   = interaction_pred$Age,
+  W1Lat_Level = interaction_pred$W1Lat_label,
+  W1Lat_ms    = round(interaction_pred$W1Lat, 4),
+  WS_Predicted = round(pred_ws$fit, 4),
+  WS_SE        = round(pred_ws$se.fit, 4),
+  WS_CI_Lower  = round(pred_ws$fit - 1.96 * pred_ws$se.fit, 4),
+  WS_CI_Upper  = round(pred_ws$fit + 1.96 * pred_ws$se.fit, 4),
+  PS_Predicted = round(pred_ps$fit, 4),
+  PS_SE        = round(pred_ps$se.fit, 4),
+  PS_CI_Lower  = round(pred_ps$fit - 1.96 * pred_ps$se.fit, 4),
+  PS_CI_Upper  = round(pred_ps$fit + 1.96 * pred_ps$se.fit, 4)
+)
+
+write.csv(table_s11, "output/SuppTable11_Interaction_Trajectories.csv",
+          row.names = FALSE, fileEncoding = "UTF-8", na = "")
+
+cat("✓ Saved: output/SuppTable11_Interaction_Trajectories.csv\n\n")
+
+# -----------------------------------------------------------------------------
+# TABLE S12: AGE-STRATIFIED WS vs PS ANALYSIS
+# -----------------------------------------------------------------------------
+
+cat("Creating Table S12: Age-Stratified Analysis...\n")
+
+data_with_group <- data_analysis %>%
+  dplyr::mutate(
+    Age_Group = dplyr::if_else(
+      Age <= median(Age),
+      "Younger (≤ median)",
+      "Older (> median)"
+    )
+  )
+
+table_s12 <- data_with_group %>%
+  dplyr::group_by(Age_Group) %>%
+  dplyr::summarise(
+    n         = n(),
+    Median_Age = round(median(Age), 1),
+    WS_Mean   = round(mean(WS), 4),
+    WS_SD     = round(sd(WS), 4),
+    PS_Mean   = round(mean(PS), 4),
+    PS_SD     = round(sd(PS), 4),
+    .groups   = "drop"
+  )
+
+# Add correlation and regression stats
+table_s12$Correlation_r  <- NA_real_
+table_s12$Correlation_p  <- NA_real_
+table_s12$Slope          <- NA_real_
+table_s12$Slope_SE       <- NA_real_
+table_s12$Slope_CI_Lower <- NA_real_
+table_s12$Slope_CI_Upper <- NA_real_
+table_s12$Slope_p        <- NA_real_
+
+for (i in 1:nrow(table_s12)) {
+  group      <- table_s12$Age_Group[i]
+  group_data <- dplyr::filter(data_with_group, Age_Group == group)
+  
+  corr_test  <- cor.test(group_data$WS, group_data$PS, method = "pearson")
+  lm_fit     <- lm(PS ~ WS, data = group_data)
+  lm_summary <- summary(lm_fit)
+  
+  table_s12$Correlation_r[i]  <- round(corr_test$estimate, 4)
+  table_s12$Correlation_p[i]  <- signif(corr_test$p.value, 3)
+  table_s12$Slope[i]          <- round(coef(lm_fit)[2], 4)
+  table_s12$Slope_SE[i]       <- round(lm_summary$coefficients[2, 2], 4)
+  table_s12$Slope_CI_Lower[i] <- round(coef(lm_fit)[2] - 1.96 * lm_summary$coefficients[2, 2], 4)
+  table_s12$Slope_CI_Upper[i] <- round(coef(lm_fit)[2] + 1.96 * lm_summary$coefficients[2, 2], 4)
+  table_s12$Slope_p[i]        <- signif(lm_summary$coefficients[2, 4], 3)
+}
+
+write.csv(table_s12, "output/SuppTable12_Age_Stratified_Analysis.csv",
+          row.names = FALSE, fileEncoding = "UTF-8", na = "")
+
+cat("✓ Saved: output/SuppTable12_Age_Stratified_Analysis.csv\n\n")
+
+# ==============================================================================
+# PART 4: END OF SUPPLEMENTARY TABLES
 # ==============================================================================
